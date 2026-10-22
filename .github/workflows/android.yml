@@ -1,0 +1,53 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "ANDROID.md"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "app/**"
+      - "apps/solidcraft-android/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle/**"
+      - "crates/**"
+      - "vendor/**"
+      - ".github/workflows/android.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ANDROID.md"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "app/**"
+      - "apps/solidcraft-android/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle/**"
+      - "crates/**"
+      - "vendor/**"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" "ndk;30.0.16248370"
+      - name: Install Rust Android target
+        run: rustup target add aarch64-linux-android
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Build APK
+        run: ./gradlew --no-daemon :app:assembleDebug

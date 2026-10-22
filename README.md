@@ -8,7 +8,7 @@
   <strong>An open-source parametric 3D CAD application built in pure Rust.</strong><br />
   Sketch, constrain, and build solids with a parametric feature timeline. Change a dimension
   and watch your model rebuild. Run it on your desktop, in your browser, or let AI agents
-  model through the built-in MCP server.
+  model through the built-in MCP server. Android build setup is documented in [ANDROID.md](ANDROID.md).
 </p>
 
 <div align="center">
