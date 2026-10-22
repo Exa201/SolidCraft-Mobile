@@ -46,7 +46,7 @@ jobs:
         with:
           packages: platform-tools
       - name: Install Android SDK components
-        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" "ndk;30.0.16248370"
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"
       - name: Install Rust Android target
         run: rustup target add aarch64-linux-android
       - name: Install cargo-ndk
