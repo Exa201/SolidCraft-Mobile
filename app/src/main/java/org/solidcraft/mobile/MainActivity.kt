@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.documentfile.provider.DocumentFile
 import com.google.androidgamesdk.GameActivity
 import java.io.File
 import java.security.MessageDigest
@@ -46,7 +47,7 @@ class MainActivity : GameActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != DOCUMENT_REQUEST_CODE) return
+        if (requestCode != DOCUMENT_REQUEST_CODE && requestCode != RESOURCE_FOLDER_REQUEST_CODE) return
         val request = synchronized(requestLock) {
             val current = activeRequest
             activeRequest = null
@@ -59,7 +60,11 @@ class MainActivity : GameActivity() {
         }
 
         val uri = data.data!!
-        Thread({ finishDocumentSelection(request, uri, data.flags) }, "solidcraft-document-picker").start()
+        if (requestCode == RESOURCE_FOLDER_REQUEST_CODE) {
+            Thread({ finishResourceFolderSelection(request, uri, data.flags) }, "solidcraft-gltf-resources").start()
+        } else {
+            Thread({ finishDocumentSelection(request, uri, data.flags) }, "solidcraft-document-picker").start()
+        }
     }
 
     private fun finishDocumentSelection(request: DocumentRequest, uri: Uri, grantedFlags: Int) {
@@ -102,11 +107,109 @@ class MainActivity : GameActivity() {
                     .put("writable", allowed and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
                 documentPreferences().edit().putString(staged.absolutePath, mapping.toString()).apply()
             }
+            val resources = GltfExternalResources.bufferPaths(staged)
+            if (resources.isNotEmpty()) {
+                requestResourceFolder(request, staged, resources)
+                return
+            }
             results[request.id] = staged.absolutePath
         } catch (error: Exception) {
             runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Document access failed"}", Toast.LENGTH_LONG).show() }
             results[request.id] = ""
         }
+    }
+
+    private fun requestResourceFolder(request: DocumentRequest, staged: File, paths: List<String>) {
+        runOnUiThread {
+            val pending = request.copy(stagedPath = staged.absolutePath, resourcePaths = paths)
+            synchronized(requestLock) {
+                if (activeRequest != null) {
+                    results[request.id] = ""
+                    return@runOnUiThread
+                }
+                activeRequest = pending
+            }
+            Toast.makeText(this, "Select the folder containing the glTF buffer files", Toast.LENGTH_LONG).show()
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            try {
+                startActivityForResult(intent, RESOURCE_FOLDER_REQUEST_CODE)
+            } catch (error: Exception) {
+                synchronized(requestLock) { activeRequest = null }
+                results[request.id] = ""
+                Toast.makeText(this, "SolidCraft: ${error.message ?: "No folder picker is available"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun finishResourceFolderSelection(request: DocumentRequest, treeUri: Uri, grantedFlags: Int) {
+        try {
+            val readable = grantedFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION
+            if (readable != 0) {
+                try {
+                    contentResolver.takePersistableUriPermission(treeUri, readable)
+                } catch (_: SecurityException) {
+                    // The folder is used only while its returned grant is active; all required
+                    // buffers are copied into the app-private working folder below.
+                }
+            }
+            val stagedPath = requireNotNull(request.stagedPath) { "The staged glTF file is missing" }
+            val targetRoot = requireNotNull(File(stagedPath).parentFile) { "The glTF working folder is missing" }
+            val tree = requireNotNull(DocumentFile.fromTreeUri(this, treeUri)) { "The selected folder is unavailable" }
+            val required = request.resourcePaths.toSet()
+            val copied = mutableSetOf<String>()
+            var visited = 0
+            var copiedBytes = 0L
+
+            fun visit(folder: DocumentFile, prefix: String, depth: Int) {
+                require(depth <= 32) { "The selected folder is nested too deeply" }
+                for (child in folder.listFiles()) {
+                    visited += 1
+                    require(visited <= 10_000) { "The selected folder contains too many entries" }
+                    val name = child.name ?: continue
+                    if (name == "." || name == ".." || '/' in name || '\\' in name) continue
+                    val relative = if (prefix.isEmpty()) name else "$prefix/$name"
+                    if (child.isDirectory) {
+                        if (required.any { it.startsWith("$relative/") }) visit(child, relative, depth + 1)
+                    } else if (child.isFile && relative in required) {
+                        val target = File(targetRoot, relative).canonicalFile
+                        val rootPath = targetRoot.canonicalPath + File.separator
+                        check(target.path.startsWith(rootPath)) { "The glTF resource path leaves its working folder" }
+                        check(target.parentFile?.isDirectory == true || target.parentFile?.mkdirs() == true) {
+                            "Could not create a glTF resource subfolder"
+                        }
+                        val source = requireNotNull(contentResolver.openInputStream(child.uri)) { "Could not open glTF buffer $relative" }
+                        source.use { input ->
+                            target.outputStream().use { output ->
+                                copiedBytes += copyLimited(input, output, MAX_GLTF_BUFFER_BYTES - copiedBytes)
+                            }
+                        }
+                        copied += relative
+                    }
+                }
+            }
+
+            visit(tree, "", 0)
+            val missing = required - copied
+            check(missing.isEmpty()) { "The selected folder is missing: ${missing.sorted().joinToString()}" }
+            results[request.id] = stagedPath
+        } catch (error: Exception) {
+            runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Could not copy the glTF buffers"}", Toast.LENGTH_LONG).show() }
+            results[request.id] = ""
+        }
+    }
+
+    private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            check(total <= limit) { "A glTF buffer is larger than the Android import limit" }
+            output.write(buffer, 0, count)
+        }
+        return total
     }
 
     private fun queryDisplayName(uri: Uri): String? {
@@ -123,13 +226,22 @@ class MainActivity : GameActivity() {
 
     companion object {
         private const val DOCUMENT_REQUEST_CODE = 7321
+        private const val RESOURCE_FOLDER_REQUEST_CODE = 7322
+        private const val MAX_GLTF_BUFFER_BYTES = 1L shl 30
         private val results = ConcurrentHashMap<Long, String>()
         private val requested = ConcurrentHashMap.newKeySet<Long>()
         private val requestLock = Any()
         private var activeRequest: DocumentRequest? = null
         @Volatile private var activeActivity: WeakReference<MainActivity>? = null
 
-        private data class DocumentRequest(val id: Long, val save: Boolean, val name: String, val extensions: Array<String>)
+        private data class DocumentRequest(
+            val id: Long,
+            val save: Boolean,
+            val name: String,
+            val extensions: Array<String>,
+            val stagedPath: String? = null,
+            val resourcePaths: List<String> = emptyList(),
+        )
 
         /** Called from the Rust render thread. Activity launches are always posted to Android's UI thread. */
         @JvmStatic
@@ -160,8 +272,10 @@ class MainActivity : GameActivity() {
                     intent.putExtra(Intent.EXTRA_TITLE, name)
                 } else {
                     intent.type = "*/*"
-                    val mimes = extensions.mapNotNull(::mimeForExtension).distinct().toTypedArray()
-                    if (mimes.isNotEmpty()) intent.putExtra(Intent.EXTRA_MIME_TYPES, mimes)
+                    // Only add a provider filter when every supported file type has a MIME
+                    // mapping. A partial filter silently hides custom CAD formats such as
+                    // .solidcraft, .fcstd and .3dm in otherwise valid document providers.
+                    CadDocumentTypes.openMimeTypes(extensions)?.let { intent.putExtra(Intent.EXTRA_MIME_TYPES, it) }
                 }
                 try {
                     activity.startActivityForResult(intent, DOCUMENT_REQUEST_CODE)
@@ -204,16 +318,35 @@ class MainActivity : GameActivity() {
 
         private fun mimeFor(name: String): String = mimeForExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
 
-        private fun mimeForExtension(raw: String): String? {
-            val extension = raw.lowercase().removePrefix(".")
-            return when (extension) {
-                "step", "stp" -> "model/step"
-                "stl" -> "model/stl"
-                "dxf" -> "image/vnd.dxf"
-                "solidcraft" -> "application/x-solidcraft"
-                "json" -> "application/json"
-                else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
-            }
-        }
+        private fun mimeForExtension(raw: String): String? = CadDocumentTypes.mimeForExtension(raw)
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(raw.lowercase().removePrefix("."))
+    }
+}
+
+/** MIME types for CAD formats; unregistered/private extensions intentionally remain unfiltered. */
+internal object CadDocumentTypes {
+    /** Returns null when any accepted extension is not mapped, so SAF can show custom CAD files. */
+    fun openMimeTypes(extensions: Array<String>): Array<String>? {
+        if (extensions.isEmpty()) return null
+        val mapped = extensions.map(::mimeForExtension)
+        if (mapped.any { it == null }) return null
+        return mapped.filterNotNull().distinct().toTypedArray()
+    }
+
+    fun mimeForExtension(raw: String): String? = when (raw.lowercase().removePrefix(".")) {
+        // IANA Media Types registry: model/3mf, model/gltf-binary, model/gltf+json,
+        // model/iges, model/obj, model/step and model/stl.
+        "3mf" -> "model/3mf"
+        "glb" -> "model/gltf-binary"
+        "gltf" -> "model/gltf+json"
+        "igs", "iges" -> "model/iges"
+        "obj" -> "model/obj"
+        "step", "stp" -> "model/step"
+        "stl" -> "model/stl"
+        "dxf" -> "image/vnd.dxf"
+        "svg" -> "image/svg+xml"
+        "solidcraft" -> "application/x-solidcraft"
+        "json" -> "application/json"
+        else -> null
     }
 }
