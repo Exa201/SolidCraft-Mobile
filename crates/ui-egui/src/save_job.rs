@@ -25,8 +25,14 @@ pub fn start(app: &mut SolveApp, command: &'static str, params: Value) -> bool {
         copy.path.clone_from(&app.session.path);
         let (tx, rx) = std::sync::mpsc::channel();
         let given = params.clone();
+        let persist_document_save = app.services.persist_document_save.clone();
         let job = std::thread::Builder::new().name("save".into()).spawn(move || {
-            let r = copy.execute(command, &given).map_err(|e| e.to_string());
+            let r = copy.execute(command, &given).map_err(|e| e.to_string()).and_then(|value| {
+                if let (Some(persist), Some(path)) = (&persist_document_save, copy.path.as_deref()) {
+                    persist(path)?;
+                }
+                Ok(value)
+            });
             let _ = tx.send((copy, r));
         });
         if job.is_ok() {
@@ -37,6 +43,20 @@ pub fn start(app: &mut SolveApp, command: &'static str, params: Value) -> bool {
     }
     let _ = app.run(command, params);
     false
+}
+
+/// The command started by a save picker may use a worker. Save jobs persist their output on that
+/// worker; direct exporters and small sidecar writers can flush the selected staged file here.
+pub(crate) fn picker_save_completed(app: &mut SolveApp, path: &str) {
+    if app.saving.is_some() || app.file_load.busy() {
+        return;
+    }
+    let persist = app.services.persist_document_save.clone();
+    if let Some(persist) = persist
+        && let Err(error) = persist(path)
+    {
+        app.set_status(error, true);
+    }
 }
 
 /// Take up a finished save (`wait`: wait for a running one).

@@ -56,7 +56,7 @@ commands:
   lists [--fix]   check that files many changes add to are sorted one item per line (the
                   message catalogs in assets/locales); --fix sorts them
   test [CARGO ARGS] [-- TEST ARGS]
-                  build the tests with the ci profile, then run every test binary at once
+                  build tests with the ci profile, then run binaries with bounded parallelism
                   (and the doc tests alongside)
   wasm            cargo check every library crate and the web app for wasm32-unknown-unknown
   web-offline [DIR]

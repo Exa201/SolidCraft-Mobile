@@ -325,7 +325,7 @@ if '--serve' in args:
             except Exception as e:
                 self._send(400, json.dumps({'ok': False, 'error': str(e)}), 'application/json')
     srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), H)
-    print('review page: http://127.0.0.1:%d  (saves %s; Ctrl-C to stop)' % (port, os.path.relpath(REVIEW, ROOT)))
+    print('review page: http://127.0.0.1:%d  (saves %s; Ctrl-C to stop)' % (srv.server_address[1], os.path.relpath(REVIEW, ROOT)), flush=True)
     try: srv.serve_forever()
     except KeyboardInterrupt: pass
     sys.exit(0)

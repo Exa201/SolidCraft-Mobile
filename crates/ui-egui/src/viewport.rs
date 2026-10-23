@@ -126,6 +126,9 @@ pub struct ViewportState {
     pub device_motion: Option<crate::space_mouse::DeviceMotion>,
     /// After immediate zoom, ignore egui's outstanding smoothing until the gesture ends.
     pub(crate) wheel_zoom_raw_until_idle: bool,
+    /// A multitouch navigation gesture owns the pointer until every finger is lifted. This keeps
+    /// the primary-touch mouse emulation from selecting or dragging geometry during navigation.
+    pub(crate) touch_navigation_active: bool,
     /// While trackpad scrolling runs, ignore egui's smoothing tail for zoom so
     /// two-finger input is not replayed as zoom after it pans.
     pub(crate) trackpad_until_idle: bool,
@@ -5869,6 +5872,35 @@ mod tests {
         }
         assert_eq!(h.app.cam.distance, after.distance);
         assert_ne!(h.app.cam.target, after.target);
+    }
+
+    #[test]
+    fn touch_long_press_opens_the_viewport_context_menu() {
+        let ctx = crate::fonts::test_context();
+        ctx.options_mut(|options| options.input_options.max_click_duration = 0.2);
+        let mut app = hover_app(false);
+        hover_frame(&mut app, &ctx, vec![]);
+        let point = app.viewport.rect.unwrap().center();
+        let device = egui::TouchDeviceId(9);
+        hover_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(point)]);
+        hover_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::Touch { device_id: device, id: egui::TouchId(0), phase: egui::TouchPhase::Start, pos: point, force: None },
+                egui::Event::PointerButton { pos: point, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::default() },
+            ],
+        );
+        assert!(app.viewport.context_menu.is_none(), "a touch press alone should not open a menu");
+
+        for _ in 0..20 {
+            hover_frame(&mut app, &ctx, vec![]);
+            if app.viewport.context_menu.is_some() {
+                break;
+            }
+        }
+
+        assert_eq!(app.viewport.context_menu, Some(point), "holding one finger should trigger the context menu");
     }
 
     #[test]

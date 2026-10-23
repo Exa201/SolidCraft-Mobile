@@ -62,6 +62,8 @@ pub fn drawn_occurrences() -> Vec<(Vec<u64>, String, Rect, bool)> {
 pub struct TreeState {
     /// The floating browser card is folded to its header.
     pub panel_collapsed: bool,
+    /// On narrow screens the floating browser starts as a compact header chip.
+    pub mobile_expanded: bool,
     /// Geometry and assembly queries, independent of the camera, selection and row visibility.
     model: Option<model::Model>,
     /// Folders closed by the user (keys like `c0/bodies`).
@@ -703,6 +705,8 @@ pub fn browser(app: &mut SolveApp, ui: &mut egui::Ui) {
     let gap = container.gap();
     let width = browser_width(app.preferences.browser_width);
     let vertical = app.ui.show_timeline && app.preferences.timeline_left;
+    let compact_mobile = !vertical && !stacked && available.width() < 600.0;
+    let compact_collapsed = compact_mobile && !app.tree.mobile_expanded;
     let mut available = available;
     if !stacked {
         available.min.x += crate::agent_chat::left_inset(app, available);
@@ -717,7 +721,18 @@ pub fn browser(app: &mut SolveApp, ui: &mut egui::Ui) {
     let bounds = if stacked {
         crate::timeline_left::stacked_rects(app, available).0
     } else {
-        panel_bounds(available, if vertical { None } else { app.shell.history }, if collapsed { t.space_24 + t.space_10 } else { width }, gap)
+        panel_bounds(
+            available,
+            if vertical { None } else { app.shell.history },
+            if collapsed {
+                t.space_24 + t.space_10
+            } else if compact_collapsed {
+                196.0
+            } else {
+                width
+            },
+            gap,
+        )
     };
     app.shell.browser = None;
     let min_height = HEADER_H + 2.0 * (CARD_INSET + 1.0);
@@ -742,7 +757,7 @@ pub fn browser(app: &mut SolveApp, ui: &mut egui::Ui) {
                     if collapsed {
                         browser_collapsed_rail(app, ui);
                     } else {
-                        browser_contents(app, ui, &mut acts, true);
+                        browser_contents(app, ui, &mut acts, true, compact_mobile, compact_collapsed);
                     }
                 });
                 if !collapsed {
@@ -794,17 +809,17 @@ pub(crate) fn panel_bounds(available: Rect, history: Option<Rect>, width: f32, g
     Rect::from_min_max(min, pos2((min.x + width).min(right), bottom))
 }
 
-fn browser_contents(app: &mut SolveApp, ui: &mut egui::Ui, acts: &mut Actions, collapsible: bool) {
+fn browser_contents(app: &mut SolveApp, ui: &mut egui::Ui, acts: &mut Actions, collapsible: bool, compact_mobile: bool, compact_collapsed: bool) {
     let t = Tokens::get();
     // Only the floating card folds; the docked column keeps its full height.
-    browser_header(app, ui, collapsible);
+    browser_header(app, ui, collapsible, compact_mobile, compact_collapsed);
     let stacked = crate::timeline_left::stacked(app);
     if collapsible
         && (if stacked {
             (app.preferences.timeline_left_browser_collapsed && app.shell.history_folding.is_none_or(|p| p[0] >= 1.0))
                 || ui.available_height() <= t.space_3
         } else {
-            app.tree.panel_collapsed && !(app.ui.show_timeline && app.preferences.timeline_left)
+            (app.tree.panel_collapsed && !(app.ui.show_timeline && app.preferences.timeline_left)) || compact_collapsed
         })
     {
         return;
@@ -820,14 +835,15 @@ fn browser_contents(app: &mut SolveApp, ui: &mut egui::Ui, acts: &mut Actions, c
 
 /// The header: the title, the body count and (on the floating card) a chevron that folds the
 /// card to just this row. The whole row is the button.
-fn browser_header(app: &mut SolveApp, ui: &mut egui::Ui, collapsible: bool) {
+fn browser_header(app: &mut SolveApp, ui: &mut egui::Ui, collapsible: bool, compact_mobile: bool, compact_collapsed: bool) {
     let t = Tokens::get();
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), HEADER_H), Sense::hover());
     let response = ui.interact(rect, ui.id().with("browser_header"), if collapsible { Sense::click() } else { Sense::hover() });
     crate::scenario::publish_target("browser:header", rect);
     let vertical = app.ui.show_timeline && app.preferences.timeline_left;
     let stacked = crate::timeline_left::stacked(app);
-    let collapsed = collapsible && if stacked { app.preferences.timeline_left_browser_collapsed } else { !vertical && app.tree.panel_collapsed };
+    let collapsed = collapsible
+        && if stacked { app.preferences.timeline_left_browser_collapsed } else { !vertical && (app.tree.panel_collapsed || compact_collapsed) };
     if vertical {
         crate::scenario::publish_handle("left-browser-toggle", rect.center());
     }
@@ -856,6 +872,8 @@ fn browser_header(app: &mut SolveApp, ui: &mut egui::Ui, collapsible: bool) {
                 app.preferences.timeline_left_browser_collapsed = !app.preferences.timeline_left_browser_collapsed;
             } else if vertical {
                 app.preferences.timeline_left_browser_collapsed = true;
+            } else if compact_mobile {
+                app.tree.mobile_expanded = !app.tree.mobile_expanded;
             } else {
                 app.tree.panel_collapsed = !app.tree.panel_collapsed;
             }

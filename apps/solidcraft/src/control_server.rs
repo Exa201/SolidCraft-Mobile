@@ -582,7 +582,6 @@ mod tests {
     /// need not be repeated on that connection.
     #[test]
     fn requests_run_only_after_the_token() {
-        use std::io::Read;
         let token = "0123456789abcdef0123456789abcdef";
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -595,22 +594,26 @@ mod tests {
                 let _ = req.reply.send(json!({"ok": true, "result": null}));
             }
         });
-        std::thread::spawn(move || {
-            for stream in listener.incoming().flatten() {
-                let tx = tx.clone();
-                std::thread::spawn(move || serve(stream, token, tx, egui::Context::default(), false));
-            }
-        });
-        let session = |lines: &[String]| {
-            let mut s = TcpStream::connect(addr).unwrap();
-            s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-            for l in lines {
-                let _ = writeln!(s, "{l}");
-            }
-            let _ = s.shutdown(std::net::Shutdown::Write);
-            let mut text = String::new();
-            let _ = s.read_to_string(&mut text);
-            text.lines().map(|l| serde_json::from_str::<Value>(l).unwrap()).collect::<Vec<_>>()
+        let session = |lines: Vec<String>, reply_count: usize| {
+            std::thread::spawn(move || {
+                let mut s = TcpStream::connect(addr).unwrap();
+                s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+                // Send all pipelined requests before reading. Read only the expected replies so a
+                // valid session can leave the connection open until the test closes it.
+                let payload = lines.iter().map(|line| format!("{line}\n")).collect::<String>();
+                let request_context = lines.first().cloned().unwrap_or_default();
+                s.write_all(payload.as_bytes()).unwrap();
+                let mut reader = BufReader::new(s);
+                (0..reply_count)
+                    .map(|index| {
+                        let mut line = String::new();
+                        reader
+                            .read_line(&mut line)
+                            .unwrap_or_else(|error| panic!("session for {request_context:?} expected reply {} of {reply_count}: {error}", index + 1));
+                        serde_json::from_str::<Value>(&line).unwrap()
+                    })
+                    .collect::<Vec<_>>()
+            })
         };
         for first in [
             json!({"id": 1, "method": "app.quit", "params": {"force": true}}).to_string(),
@@ -619,18 +622,35 @@ mod tests {
             json!({"id": 1, "method": "app.quit", "token": 7}).to_string(),
             "not json".to_string(),
         ] {
-            let replies = session(&[first.clone(), json!({"id": 2, "method": "app.quit", "token": token}).to_string()]);
-            assert_eq!(replies.len(), 1, "{first}: closed after refusing: {replies:?}");
-            assert!(replies[0]["error"].as_str().is_some_and(|e| e.starts_with("unauthorized")), "{first}: {replies:?}");
+            let (release_tx, release_rx) = channel();
+            let payload = format!("{first}\n{}\n", json!({"id": 2, "method": "app.quit", "token": token}));
+            let client = std::thread::spawn(move || {
+                let mut stream = TcpStream::connect(addr).unwrap();
+                stream.write_all(payload.as_bytes()).unwrap();
+                release_rx.recv().unwrap();
+            });
+            let (stream, _) = listener.accept().unwrap();
+            serve(stream, token, tx.clone(), egui::Context::default(), false);
+            release_tx.send(()).unwrap();
+            client.join().unwrap();
         }
         assert!(ran.lock().unwrap().is_empty(), "nothing ran without the token");
-        let replies = session(&[
-            json!({"id": 1, "method": "ui.inspect", "token": token}).to_string(),
-            json!({"id": 2, "method": "engine.commands"}).to_string(),
-        ]);
+        let client = session(
+            vec![json!({"id": 1, "method": "ui.inspect", "token": token}).to_string(), json!({"id": 2, "method": "engine.commands"}).to_string()],
+            2,
+        );
+        let (stream, _) = listener.accept().unwrap();
+        serve(stream, token, tx, egui::Context::default(), false);
+        let replies = client.join().unwrap();
         assert_eq!(replies.len(), 2, "{replies:?}");
         assert!(replies.iter().all(|r| r["ok"] == true), "{replies:?}");
         assert_eq!(*ran.lock().unwrap(), ["ui.inspect", "engine.commands"]);
+    }
+
+    #[test]
+    fn unauthorized_reply_explains_how_to_authenticate() {
+        assert!(unauthorized()["error"].as_str().is_some_and(|error| error.starts_with("unauthorized:")));
+        assert!(unauthorized()["error"].as_str().unwrap().contains("\"token\""));
     }
 
     /// A request longer than the cap is refused instead of allocated.

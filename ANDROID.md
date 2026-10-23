@@ -20,4 +20,6 @@ Install Android SDK platform 37, Android NDK 30, JDK 17 or newer, Rust stable, t
 
 The Gradle build compiles `apps/solidcraft-android` for Android and packages a stripped native library into the APK. Install the debug APK with Android Studio or `adb install app/build/outputs/apk/debug/app-debug.apk`.
 
-The first mobile milestone launches a new SolidCraft design in the shared CAD interface. Android document-provider integration, mobile-first panel layouts, and touch-specific CAD navigation are follow-on work; file open/save is not yet wired to Android's Storage Access Framework.
+The Android host connects the shared CAD interface to Android's Storage Access Framework. Open, Save As, reopen after process restart, and asynchronous DXF export have passed a Downloads-provider workflow on an API 36 emulator. The current viewport has touch-aware pan, pinch, and orbit handling plus a long-press context menu; these features have unit/host integration coverage and an initial emulator check.
+
+The application is still a development preview, not a feature-complete Android release. Most registered CAD commands share the Rust implementation but have not been individually verified on Android. Recent-file recovery, provider error/permission cases, lifecycle and rotation testing, fine-grained touch selection, and automated Android UI tests remain open. See [FEATURE_PARITY.md](FEATURE_PARITY.md) and [TEST_REPORT.md](TEST_REPORT.md) for the verified state and gaps.

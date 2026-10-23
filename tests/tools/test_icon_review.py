@@ -5,7 +5,6 @@ import os
 import re
 from pathlib import Path
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
@@ -21,7 +20,7 @@ SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="3
 
 
 @contextlib.contextmanager
-def review_fixture():
+def review_fixture(serve=True):
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         design = root / 'assets/icons/ui/design'
@@ -32,37 +31,94 @@ def review_fixture():
         (design / 'references.toml').write_text('[category.model]\nlabel="Model"\nrule="Standard projection"\nicons=["box"]\n', encoding='utf-8')
         (design / 'aliases.toml').write_text('[alias]\nbox_alias="box"\n', encoding='utf-8')
         (design / 'review.json').write_text(json.dumps({'final': {'box': ''}, 'notes': {}}), encoding='utf-8')
-        with socket.socket() as available:
-            available.bind(('127.0.0.1', 0))
-            port = available.getsockname()[1]
-        process = subprocess.Popen([sys.executable, '-B', str(design / 'tools/icon_status.py'), '--serve', str(port)],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        url = f'http://127.0.0.1:{port}'
+        if not serve:
+            yield root, design, None, None
+            return
+        process = subprocess.Popen([sys.executable, '-B', str(design / 'tools/icon_status.py'), '--serve', '0'],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        startup = []
+        match = None
+        while process.poll() is None and match is None:
+            line = process.stdout.readline().decode(errors='replace').strip()
+            if not line and process.poll() is not None: break
+            startup.append(line)
+            match = re.search(r'http://127\.0\.0\.1:(\d+)', line)
+        if not match:
+            process.terminate()
+            process.wait(timeout=5)
+            process.stdout.close()
+            error = process.stderr.read().decode(errors='replace')
+            process.stderr.close()
+            raise RuntimeError('\\n'.join(startup) + '\\n' + error or 'review server did not report its port')
+        url = 'http://127.0.0.1:' + match.group(1)
         def get(path):
-            with urllib.request.urlopen(url + path, timeout=3) as response:
-                data = response.read().decode()
-                return json.loads(data) if path == '/api/review' else data
+            # Loopback requests can be reset transiently on busy Windows runners. Retry only
+            # transport failures; HTTP error responses and a dead server still fail immediately.
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    with urllib.request.urlopen(url + path, timeout=15) as response:
+                        data = response.read().decode()
+                        return json.loads(data) if path == '/api/review' else data
+                except urllib.error.HTTPError:
+                    raise
+                except TimeoutError as error:
+                    if process.poll() is None:
+                        process.terminate()
+                        process.wait(timeout=5)
+                    detail = process.stderr.read().decode(errors='replace')
+                    raise TimeoutError('review server response stalled; server diagnostics: ' + detail) from error
+                except urllib.error.URLError as error:
+                    # Do not retry a timed-out page render: that request is still busy
+                    # generating previews, and repeating it only queues more work.
+                    if isinstance(error.reason, TimeoutError):
+                        if process.poll() is None:
+                            process.terminate()
+                            process.wait(timeout=5)
+                        detail = process.stderr.read().decode(errors='replace')
+                        raise TimeoutError('review server response stalled; server diagnostics: ' + detail) from error
+                    if process.poll() is not None:
+                        raise RuntimeError(process.stderr.read().decode())
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(.05)
+                except ConnectionError:
+                    if process.poll() is not None:
+                        raise RuntimeError(process.stderr.read().decode())
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(.05)
         def post(state, final=None, notes=None, endpoint='/api/review', rev=None):
             payload = state if endpoint == '/api/palette' else {
                 'base': state, 'final': state['final'] if final is None else final,
                 'notes': state['notes'] if notes is None else notes, 'rev': rev or state['rev']}
-            try:
-                with urllib.request.urlopen(urllib.request.Request(url + endpoint, data=json.dumps(payload).encode()), timeout=3) as response:
-                    return json.load(response)
-            except urllib.error.HTTPError as error:
-                error.close()
-                raise
+            data = json.dumps(payload).encode()
+            # The review suite's export cases have no pending notes, so retrying
+            # a response reset cannot create a duplicate inbox request.
+            retry_safe = True
+            deadline = time.monotonic() + 15
+            while True:
+                try:
+                    with urllib.request.urlopen(urllib.request.Request(url + endpoint, data=data), timeout=3) as response:
+                        return json.load(response)
+                except urllib.error.HTTPError as error:
+                    error.close()
+                    raise
+                except (urllib.error.URLError, ConnectionError, TimeoutError):
+                    if not retry_safe or process.poll() is not None or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(.05)
         try:
             for attempt in range(100):
                 try:
                     get('/api/review'); break
-                except urllib.error.URLError:
+                except (urllib.error.URLError, ConnectionError, TimeoutError):
                     if process.poll() is not None: raise RuntimeError(process.stderr.read().decode())
                     time.sleep(.02)
             else: raise RuntimeError('server did not start')
             yield root, design, get, post
         finally:
-            process.terminate(); process.wait(timeout=5); process.stderr.close()
+            process.terminate(); process.wait(timeout=5); process.stdout.close(); process.stderr.close()
 
 
 class IconReviewTest(unittest.TestCase):
@@ -100,12 +156,15 @@ class IconReviewTest(unittest.TestCase):
             self.assertIn('3 discovered icon ids · 3 with artwork · 0 missing', get('/'))
 
     def test_inline_clips_and_masks_are_scoped_to_each_preview_and_dashes_use_guides(self):
-        with review_fixture() as (root, design, get, post):
+        with review_fixture(serve=False) as (root, design, _, _):
             for name in ('environment_map', 'new', 'draft', 'bounding_solid', 'extend'):
                 shutil.copy2(TOOLS.parent / f'svg/model/{name}.svg', design / f'svg/model/{name}.svg')
             with (design / 'aliases.toml').open('a') as aliases:
                 aliases.write('surface_env={master="environment_map",accent="surface"}\n')
-            page = get('/')
+            page_path = root / 'target/inline-preview.html'
+            subprocess.run([sys.executable, '-B', str(design / 'tools/icon_status.py'), '--out', str(page_path)],
+                           check=True, capture_output=True, text=True)
+            page = page_path.read_text(encoding='utf-8')
             fragments = re.findall(r'<svg\b.*?</svg>', page, re.S)
             seen = set()
             for svg in fragments:

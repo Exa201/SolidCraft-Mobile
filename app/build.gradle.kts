@@ -27,11 +27,11 @@ val buildRustAndroid = tasks.register<Exec>("buildRustAndroid") {
     workingDir = rootProject.projectDir
     commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", "app/src/main/jniLibs", "build", "-p", "solidcraft-android", "--profile", "android")
     inputs.files(
-        file("Cargo.toml"),
-        file("Cargo.lock"),
-        fileTree("apps/solidcraft-android"),
-        fileTree("crates"),
-        fileTree("vendor"),
+        rootProject.file("Cargo.toml"),
+        rootProject.file("Cargo.lock"),
+        rootProject.fileTree("apps/solidcraft-android"),
+        rootProject.fileTree("crates"),
+        rootProject.fileTree("vendor"),
     )
     outputs.dir("src/main/jniLibs/arm64-v8a")
 }

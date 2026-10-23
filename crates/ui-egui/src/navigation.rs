@@ -306,6 +306,57 @@ pub(crate) struct CameraInput {
     pub mode: Option<NavMode>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TouchDeltas {
+    pan: egui::Vec2,
+    zoom: f32,
+    orbit: egui::Vec2,
+}
+
+impl Default for TouchDeltas {
+    fn default() -> Self {
+        Self { pan: egui::Vec2::ZERO, zoom: 1.0, orbit: egui::Vec2::ZERO }
+    }
+}
+
+/// Two fingers pan and pinch; three fingers drag to orbit. A two-finger twist also orbits
+/// horizontally, giving users a rotation gesture without stealing the one-finger selection tool.
+fn touch_deltas(info: egui::MultiTouchInfo, viewport_width: f32) -> TouchDeltas {
+    let finite_delta = |v: egui::Vec2| {
+        let component = |n: f32| if n.is_finite() { n.clamp(-1e4, 1e4) } else { 0.0 };
+        egui::vec2(component(v.x), component(v.y))
+    };
+    let zoom = if info.zoom_delta.is_finite() && info.zoom_delta > 0.0 { info.zoom_delta.clamp(0.05, 20.0) } else { 1.0 };
+    if info.num_touches >= 3 {
+        TouchDeltas { orbit: finite_delta(info.translation_delta), ..TouchDeltas::default() }
+    } else {
+        let twist = if info.rotation_delta.is_finite() { info.rotation_delta.clamp(-1.0, 1.0) } else { 0.0 };
+        TouchDeltas { pan: finite_delta(info.translation_delta), zoom, orbit: egui::vec2(twist * viewport_width.clamp(1.0, 1e4), 0.0) }
+    }
+}
+
+fn apply_touch_navigation(app: &mut SolveApp, rect: Rect, info: egui::MultiTouchInfo, caps: NavCaps) -> TouchDeltas {
+    let deltas = touch_deltas(info, rect.width());
+    if deltas.pan != egui::Vec2::ZERO {
+        let mut pan = deltas.pan;
+        pan.x *= crate::prefs::pan_sign_x(app);
+        camera_motion(app, rect, json!({"motion":"pan", "delta":[pan.x, pan.y]}));
+    }
+    if caps.orbit && deltas.orbit != egui::Vec2::ZERO {
+        camera_motion(app, rect, json!({"motion":"orbit", "delta":[deltas.orbit.x, deltas.orbit.y]}));
+    }
+    if deltas.zoom != 1.0 {
+        let factor = f64::from(deltas.zoom).powf(-crate::prefs::zoom_sign(app));
+        let anchor = zoom_anchor(app, rect, Some(info.center_pos), caps.orbit);
+        let mut params = json!({"motion":"zoom", "factor":factor.clamp(0.05, 20.0)});
+        if let Some(anchor) = anchor {
+            params["anchor"] = json!(anchor);
+        }
+        camera_motion(app, rect, params);
+    }
+    deltas
+}
+
 /// Camera input for one frame over `rect`: the navigation preset's buttons and modifiers, Orbit
 /// around, wheel, trackpad and pinch zoom (to the cursor), middle double-click, continuous orbit
 /// and orbit snapping. Every camera page calls this, so the mouse moves the camera the same way
@@ -314,7 +365,7 @@ pub(crate) struct CameraInput {
 /// `caps.orbit` off, bindings that orbit do nothing and pan and zoom work as usual.
 pub(crate) fn handle(app: &mut SolveApp, ui: &mut egui::Ui, rect: Rect, resp: &egui::Response, caps: NavCaps) -> CameraInput {
     let picking = caps.pick;
-    let (hover, scroll, mods, middle, secondary_down, primary_down, primary_pressed, primary_released, delta) = ui.input(|i| {
+    let (hover, scroll, mods, middle, secondary_down, mut primary_down, mut primary_pressed, primary_released, mut delta) = ui.input(|i| {
         (
             i.pointer.hover_pos(),
             i.smooth_scroll_delta.y,
@@ -327,6 +378,23 @@ pub(crate) fn handle(app: &mut SolveApp, ui: &mut egui::Ui, rect: Rect, resp: &e
             i.pointer.delta(),
         )
     });
+    let (multi_touch, any_touches) = ui.input(|i| (i.multi_touch(), i.any_touches()));
+    let multi_touch = multi_touch.filter(|info| info.num_touches >= 2);
+    if !any_touches {
+        app.viewport.touch_navigation_active = false;
+    }
+    if multi_touch.is_some_and(|info| rect.contains(info.center_pos) && !crate::shell::covered(app, info.center_pos)) {
+        app.viewport.touch_navigation_active = true;
+    }
+    let touch_navigation_active = app.viewport.touch_navigation_active;
+    if touch_navigation_active {
+        // winit also exposes the first finger as a primary mouse button. Once another finger
+        // joins, that emulated click must not start or finish a geometry drag.
+        primary_down = false;
+        primary_pressed = false;
+        delta = egui::Vec2::ZERO;
+        app.viewport.primary_nav = None;
+    }
     let hover = hover.filter(|p| !crate::shell::covered(app, *p));
     // The right button belongs to the marking menu while it is open.
     let secondary_down = secondary_down && app.viewport.context_menu.is_none();
@@ -336,7 +404,11 @@ pub(crate) fn handle(app: &mut SolveApp, ui: &mut egui::Ui, rect: Rect, resp: &e
     // hit test also counts the model as under the pointer a few points past its own edge and
     // inside a window's or a list's edge (#678), so the pointer must be in the viewport too,
     // with no window or menu above it.
-    let inside = ui.is_enabled() && resp.contains_pointer() && ui.rect_contains_pointer(rect) && hover.is_some_and(|p| !axes.contains(p));
+    let pointer_inside = ui.is_enabled() && resp.contains_pointer() && ui.rect_contains_pointer(rect) && hover.is_some_and(|p| !axes.contains(p));
+    let touch_inside = multi_touch.is_some_and(|info| {
+        ui.is_enabled() && rect.contains(info.center_pos) && !axes.contains(info.center_pos) && !crate::shell::covered(app, info.center_pos)
+    });
+    let inside = pointer_inside && !touch_navigation_active;
     app.viewport.mouse = hover.filter(|_| inside);
     // Sketch snap suppression is set once in `viewport::show` from preferences.
     middle_double_click(app, ui, inside);
@@ -558,12 +630,39 @@ pub(crate) fn handle(app: &mut SolveApp, ui: &mut egui::Ui, rect: Rect, resp: &e
             ui.ctx().request_repaint();
         }
     }
+    let mut touch_motion = TouchDeltas::default();
+    if touch_inside && let Some(info) = multi_touch {
+        touch_motion = apply_touch_navigation(app, rect, info, caps);
+        app.viewport.orbit_free = None;
+    }
     if !app.cam.is_valid() {
         app.viewport.orbit_free = None;
         app.cam = Camera::default();
         app.fit_view();
     }
-    CameraInput { hover, scroll, mods, middle, secondary_down, primary_down, primary_pressed, delta, inside, axes, pinch, pan, primary_nav, mode }
+    let touch_mode = if touch_inside && multi_touch.is_some() {
+        Some(if multi_touch.is_some_and(|info| info.num_touches >= 3) { NavMode::Orbit } else { NavMode::Pan })
+    } else if touch_navigation_active {
+        Some(NavMode::Pan)
+    } else {
+        None
+    };
+    CameraInput {
+        hover,
+        scroll,
+        mods,
+        middle,
+        secondary_down,
+        primary_down,
+        primary_pressed,
+        delta,
+        inside,
+        axes,
+        pinch: if touch_inside { pinch * touch_motion.zoom } else { pinch },
+        pan: if touch_inside { pan + touch_motion.pan } else { pan },
+        primary_nav,
+        mode: touch_mode.or(mode),
+    }
 }
 
 /// The 3D mouse's motion this frame (#1336), on a page `rect` whose camera may do `caps`: the cap
@@ -777,6 +876,143 @@ fn orbit_camera(app: &mut SolveApp, dx: f64, dy: f64) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn touch_gestures_separate_two_finger_navigation_from_three_finger_orbit() {
+        use super::*;
+        let two = egui::MultiTouchInfo {
+            start_time: 0.0,
+            start_pos: pos2(200.0, 300.0),
+            num_touches: 2,
+            zoom_delta: 1.5,
+            zoom_delta_2d: egui::vec2(1.5, 1.5),
+            rotation_delta: 0.1,
+            translation_delta: egui::vec2(12.0, -8.0),
+            force: 0.0,
+            center_pos: pos2(400.0, 500.0),
+        };
+        let deltas = touch_deltas(two, 800.0);
+        assert_eq!(deltas.pan, egui::vec2(12.0, -8.0));
+        assert_eq!(deltas.zoom, 1.5);
+        assert_eq!(deltas.orbit, egui::vec2(80.0, 0.0));
+
+        let three = egui::MultiTouchInfo { num_touches: 3, ..two };
+        let deltas = touch_deltas(three, 800.0);
+        assert_eq!(deltas.pan, egui::Vec2::ZERO);
+        assert_eq!(deltas.zoom, 1.0);
+        assert_eq!(deltas.orbit, egui::vec2(12.0, -8.0));
+    }
+
+    #[test]
+    fn touch_navigation_discards_non_finite_input_and_bounds_hostile_deltas() {
+        use super::*;
+        let invalid = egui::MultiTouchInfo {
+            start_time: 0.0,
+            start_pos: Pos2::ZERO,
+            num_touches: 2,
+            zoom_delta: f32::NAN,
+            zoom_delta_2d: egui::Vec2::ZERO,
+            rotation_delta: f32::INFINITY,
+            translation_delta: egui::vec2(f32::INFINITY, 20_000.0),
+            force: 0.0,
+            center_pos: Pos2::ZERO,
+        };
+        let deltas = touch_deltas(invalid, 800.0);
+        assert_eq!(deltas.pan, egui::vec2(0.0, 10_000.0));
+        assert_eq!(deltas.zoom, 1.0);
+        assert_eq!(deltas.orbit, egui::Vec2::ZERO);
+    }
+
+    #[test]
+    fn two_finger_touch_events_reach_the_viewport_camera() {
+        use super::*;
+        let mut h = crate::scenario::Harness::new();
+        h.frames(2);
+        let rect = h.app.viewport.rect.expect("the model viewport is laid out");
+        let centre = rect.center();
+        let left = centre + egui::vec2(-50.0, 0.0);
+        let right = centre + egui::vec2(50.0, 0.0);
+        let device = egui::TouchDeviceId(1);
+        let pointer = |pos| egui::Event::PointerMoved(pos);
+        let touch = |id, phase, pos| egui::Event::Touch { device_id: device, id: egui::TouchId(id), phase, pos, force: None };
+        let frame = |h: &mut crate::scenario::Harness, events| {
+            let time = h.ctx.input(|i| i.time) + 1.0 / 60.0;
+            let raw = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1600.0, 1000.0))),
+                time: Some(time),
+                focused: true,
+                events,
+                ..Default::default()
+            };
+            let app = &mut h.app;
+            let mut out = h.ctx.run_ui(raw, |ui| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            });
+            out.textures_delta.clear();
+        };
+
+        let before = h.app.cam;
+        // egui starts its multi-touch gesture only when a pointer position was already
+        // established in a preceding frame, matching the platform event ordering.
+        frame(&mut h, vec![pointer(centre)]);
+        frame(&mut h, vec![touch(1, egui::TouchPhase::Start, left), touch(2, egui::TouchPhase::Start, right)]);
+        assert!(h.ctx.input(|i| i.multi_touch().is_some()), "egui should recognize two active touch points");
+        frame(
+            &mut h,
+            vec![
+                touch(1, egui::TouchPhase::Move, centre + egui::vec2(-70.0, 12.0)),
+                touch(2, egui::TouchPhase::Move, centre + egui::vec2(70.0, 12.0)),
+                pointer(centre),
+            ],
+        );
+        assert!(h.app.viewport.touch_navigation_active, "the multitouch stream should claim navigation");
+        assert_ne!(h.app.cam, before, "two-finger touch input should change the camera");
+
+        frame(
+            &mut h,
+            vec![
+                touch(1, egui::TouchPhase::End, centre + egui::vec2(-70.0, 12.0)),
+                touch(2, egui::TouchPhase::End, centre + egui::vec2(70.0, 12.0)),
+                pointer(centre),
+            ],
+        );
+        assert!(!h.app.viewport.touch_navigation_active, "releasing the last finger returns pointer ownership");
+    }
+
+    #[test]
+    fn two_finger_touch_outside_the_viewport_does_not_capture_navigation() {
+        use super::*;
+        let mut h = crate::scenario::Harness::new();
+        let outside = Pos2::new(8.0, 8.0);
+        let device = egui::TouchDeviceId(2);
+        let touch = |id, phase| egui::Event::Touch {
+            device_id: device,
+            id: egui::TouchId(id),
+            phase,
+            pos: outside + egui::vec2(if id == 1 { -2.0 } else { 2.0 }, 0.0),
+            force: None,
+        };
+        let frame = |h: &mut crate::scenario::Harness, events| {
+            let time = h.ctx.input(|i| i.time) + 1.0 / 60.0;
+            let raw = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1600.0, 1000.0))),
+                time: Some(time),
+                focused: true,
+                events,
+                ..Default::default()
+            };
+            let app = &mut h.app;
+            let mut out = h.ctx.run_ui(raw, |ui| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            });
+            out.textures_delta.clear();
+        };
+        frame(&mut h, vec![egui::Event::PointerMoved(outside)]);
+        frame(&mut h, vec![touch(1, egui::TouchPhase::Start), touch(2, egui::TouchPhase::Start)]);
+        assert!(!h.app.viewport.touch_navigation_active, "touches outside the viewport must not claim CAD navigation");
+    }
+
     #[test]
     fn clamped_drag_stays_reversible_and_restarts_after_free_orbit() {
         use super::*;
