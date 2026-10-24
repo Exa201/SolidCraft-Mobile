@@ -50,14 +50,14 @@ internal object GltfExternalResources {
     private fun readGlbJson(file: File): String? {
         RandomAccessFile(file, "r").use { input ->
             if (input.length() < 20) return null
-            require(input.readInt().toUInt() == GLB_MAGIC.toUInt()) { "Invalid GLB header" }
-            require(input.readInt() == 2) { "Only GLB version 2 is supported" }
-            val declaredLength = input.readInt().toLong() and 0xffffffffL
+            require(input.readLittleEndianInt().toUInt() == GLB_MAGIC.toUInt()) { "Invalid GLB header" }
+            require(input.readLittleEndianInt() == 2) { "Only GLB version 2 is supported" }
+            val declaredLength = input.readLittleEndianInt().toLong() and 0xffffffffL
             require(declaredLength <= input.length() && declaredLength >= 20) { "Invalid GLB length" }
             var remaining = declaredLength - 12
             while (remaining >= 8) {
-                val chunkLength = input.readInt().toLong() and 0xffffffffL
-                val chunkType = input.readInt()
+                val chunkLength = input.readLittleEndianInt().toLong() and 0xffffffffL
+                val chunkType = input.readLittleEndianInt()
                 remaining -= 8
                 require(chunkLength <= remaining && chunkLength <= MAX_JSON_BYTES) { "Invalid or oversized GLB chunk" }
                 if (chunkType == JSON_CHUNK) {
@@ -71,4 +71,6 @@ internal object GltfExternalResources {
         }
         return null
     }
+
+    private fun RandomAccessFile.readLittleEndianInt(): Int = Integer.reverseBytes(readInt())
 }

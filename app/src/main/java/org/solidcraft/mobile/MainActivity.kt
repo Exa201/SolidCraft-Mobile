@@ -27,6 +27,11 @@ class MainActivity : GameActivity() {
         activeActivity = WeakReference(this)
     }
 
+    override fun onResume() {
+        super.onResume()
+        hideSystemBars()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()

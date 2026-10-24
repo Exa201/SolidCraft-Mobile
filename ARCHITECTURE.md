@@ -2,43 +2,58 @@
 
 ## Current state
 
-The Android package is a Kotlin `GameActivity` host which loads `solidcraft_android`, a Rust `cdylib`. `apps/solidcraft-android/src/lib.rs` starts `eframe` with the shared `solidcraft_ui_egui::SolveApp` and `solidcraft_engine::Session`. Geometry, sketches, the parametric feature timeline, import/export code and most CAD UI are therefore shared with desktop. Android does not fork or reimplement the geometry engine.
-
-## Layers
+SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui interface in a native Android application. Kotlin is used for Android platform APIs and lifecycle integration; Rust remains the owner of CAD documents, commands, geometry, undo/recovery, and rendering. The Android application targets API 37, supports API 28 and later, and currently packages the `arm64-v8a` ABI.
 
 ```text
 Android Activity (Kotlin / GameActivity)
-        ↓ GameActivity native loading
+  ├─ Android lifecycle, immersive window, text input
+  ├─ Storage Access Framework and ContentResolver
+  └─ JNI callbacks for document picker and write-back
+          ↓ GameActivity native loading / JNI
 Rust Android entry (apps/solidcraft-android)
-        ↓
-eframe + egui UI (crates/ui-egui)
-        ↓ command API
-Engine / document / IO / sketch / kernel / geometry crates
-        ↓
-wgpu rendering (shared renderer)
+  ├─ eframe + egui
+  └─ shared SolveApp and Session
+          ↓
+CAD UI / command API (crates/ui-egui)
+          ↓
+Engine, document, IO, sketch, kernel and geometry crates
+          ↓
+Shared wgpu rendering
 ```
 
-The Android activity provides lifecycle, text input, native-library loading, immersive viewport handling, and a Storage Access Framework (SAF) bridge. `ACTION_OPEN_DOCUMENT` stages selected content in a durable app-private workspace using a stable URI-derived path; `ACTION_CREATE_DOCUMENT` stages output and retains a URI mapping so Rust file commands can write the result back through `ContentResolver`. Persistable URI grants are requested where the provider offers them. The durable path preserves SolidCraft's recent-file entries if Android clears its cache, and reopening the same provider URI refreshes the same working copy. An API-36 emulator test opened a SolidCraft design from Downloads, saved a new `.solidcraft` file, reopened it after force-stopping the app through the persisted Recent list, and exported a DXF through the asynchronous file worker. Eframe settings are stored in the app's internal data directory. The Rust recovery UI is also enabled against a private `recovery` directory and uses the saved autosave interval; its directory creation and shared recovery logic are covered, but forced-process-death recovery has not yet been exercised on device. The Android bridge uses a JNI global class reference created on the UI thread because class lookup from a native worker thread could not resolve app classes. No broad storage permission is requested. Android registers bundled font families and starts the shared system-font loader before constructing the app; without this registration the app panicked during startup on Android.
+## Platform boundary and data flow
 
-## Input and rendering
+`MainActivity` is a `GameActivity` host. It hides system bars while retaining transient gesture access, registers itself for JNI callbacks, and starts SAF intents on the Android UI thread. It does not implement CAD commands or duplicate the Rust interface in Compose.
 
-`crates/ui-egui/src/navigation.rs` owns shared camera navigation, including pinch and trackpad event handling. Two-finger input is mapped to pan, pinch zoom and twist orbit; three-finger drag maps to orbit. Multi-touch latches pointer ownership until every touch is released, suppressing the primary-button emulation during a navigation gesture. Pure mapping tests and a host integration test that feeds egui touch events through the viewport into camera movement pass. Android device gesture arbitration, small-target picking and stylus input still need device tests.
+The engine accepts filesystem paths, so SAF documents are copied into durable app-private storage. Open selections are staged before the Rust file command receives the path. Save selections retain a URI-to-staged-path mapping; Rust saves to the staged file and the Kotlin bridge writes the completed file back through `ContentResolver`. Persistable grants are retained when the provider supports them. No broad storage permission is requested. The staged workspace is not the user-visible source of truth: provider write failures are returned to the save workflow.
 
-The Rust app runs through eframe/wgpu and GameActivity. Eframe persistence is pointed at the Android internal data directory; the app loads the shared `SolveApp` preferences and writes them at a two-second interval, including the recent-document list. The latest emulator run reopened a SAF document from that list after force-stopping and relaunching the process. The latest debug APK installed and remained top-resumed on both an API 36 emulator and the attached Android 16 HONOR device; sampled logs on both showed no fatal exception or Rust panic. Opening the system picker returned to the immersive CAD view on the emulator. Pause/resume, orientation changes, surface recreation and GPU context loss still need explicit lifecycle verification. The SAF round-trip remains emulator-only.
+For glTF documents with external relative buffers, Kotlin parses the glTF JSON or GLB v2 JSON chunk, rejects unsafe paths, and asks the user to select the buffer folder. Only referenced files are copied into the staged document directory, with traversal and size limits. GLB integer fields are little-endian. File-picker cancellation resolves as no selection.
 
-## File workflow target
+The Rust Android entry points eframe persistence and the shared recovery service at app-private paths. Preferences and recent documents are saved by eframe; the recovery service uses SolidCraft's existing autosave interval and document recovery logic. The Android host uses a cached JNI global class reference created on the UI thread because class lookup from a native worker thread failed in device testing.
 
-The SAF bridge is present in `MainActivity.kt` and `apps/solidcraft-android/src/storage.rs`. It stages provider files because engine commands consume filesystem paths. Design save jobs and background DXF export write back only after the local file is complete; a failed provider write keeps the design dirty or reports a file-operation error. The Downloads provider has passed open, Save As, process restart/reopen, and asynchronous DXF export. Additional providers, overwrite/cancel/error cases, and lifecycle recovery still need automated or device tests. Cancellation currently resolves to no selection; provider failures are returned to the UI status/toast path.
+## Input, viewport and rendering
 
-## Android UI strategy
+Camera navigation lives in `crates/ui-egui/src/navigation.rs`. The shared event layer maps multi-touch gestures to pan, pinch zoom and orbit, tracks touch ownership until release, and suppresses emulated primary-button input during navigation. Viewport touch streams are distinguished from touches outside the viewport. Touch interaction expands screen-space hit slop for sketch points and curves, vertices, edges and axes; mouse selection keeps its precise thresholds. The viewport also supports long-press context actions.
 
-The existing project instruction keeps application behavior in Rust and makes the UI crate swappable. Preserve the Rust CAD UI and engine while adding an Android-specific responsive egui presentation and only use Kotlin for Android platform APIs, lifecycle, document-provider callbacks, and native host concerns. This avoids duplicating engine commands in a second UI stack. A Compose overlay may be evaluated only if it can coexist with the GameActivity render surface and does not create a second source of CAD command behavior.
+Host integration tests exercise egui touch events through camera navigation and viewport selection. The complete egui crate suite has passed on the current working tree before the final full-workspace CI run. Small-target accuracy and gesture arbitration have not yet been verified on an Android device. Physical keyboard, mouse and stylus behavior also need device-level coverage.
 
-The command ribbon switches to its icon-only presentation below 600 egui points and retains the saved label preference at tablet/desktop widths. The floating Browser also starts as a 196-point compact header below 600 points and expands by touch without changing the desktop fold preference. The Browser breakpoint has a unit test and phone-width emulator screenshot/tap verification. Other dialogs, panels and interaction targets still require mobile-specific work.
+The Rust UI is rendered through eframe/wgpu on GameActivity. Android lifecycle callbacks and eframe persistence are wired, and the app has launched on an API 36 emulator and a physical Android 16 device. Pause/resume, rotation, surface recreation, GPU context loss, forced-crash recovery, and memory-pressure behavior are not yet fully tested on Android.
 
-## Risks and decisions
+## Responsive presentation
 
-- Existing desktop panels can consume too much of a phone viewport; a mobile layout mode is required.
-- Direct imports/exports and auxiliary UI actions may depend on filesystem paths, native dialogs, external programs, keychains, or network services that are absent on Android.
-- The current debug APK is large; use release stripping and ABI splits only after verifying the generated artifact and supported device targets.
-- Full parity spans hundreds of registered commands. `FEATURE_PARITY.md` records each command and keeps shared-code status separate from Android verification.
+The existing Rust UI switches the command ribbon to compact icon presentation below 600 egui points. The floating Browser starts as a compact 196-point header at phone widths and expands by touch without changing the desktop fold preference. Targeted host tests and API 36 portrait/landscape UI checks cover these changes. Other panels and dialogs still need systematic phone and tablet review; the shared desktop UI is not yet fully touch-optimized.
+
+## Tests and evidence
+
+- `FEATURE_PARITY.md` inventories 405 registered desktop commands plus one command marked planned by the original source. Shared Rust implementation is not treated as proof of Android device behavior.
+- Android Kotlin unit tests cover CAD MIME mappings, SAF filter behavior, safe relative glTF paths, sidecar discovery, and GLB little-endian JSON extraction.
+- The API 36 emulator has verified SAF open, Save As, reopen after process restart, and asynchronous DXF export through Downloads.
+- Rust host tests cover navigation, touch ownership and expanded selection hit slop. They do not prove physical-device touch precision.
+- A full `cargo xtask ci` run for the exact working tree is in progress; `TEST_REPORT.md` records completed subtests and must be updated with its final result.
+- The current debug APK has been built and inspected but the latest APK has not yet been installed and re-tested on a device. Production signing is not configured.
+
+## Android UI strategy and remaining work
+
+Keep CAD behavior and shared command semantics in Rust, and use Kotlin for Android APIs, lifecycle, SAF, and native host callbacks. Continue adding responsive egui layouts instead of a second Compose implementation of the same command system. Compose overlays should be considered only if they can coexist with GameActivity rendering without creating duplicate CAD behavior.
+
+The application remains a development preview. Full command-by-command Android usability, provider error and permission cases, multi-provider SAF tests, device CAD workflows, lifecycle recovery, small-screen dialogs, tablet adaptation, performance on complex models, release signing, exact-commit GitHub CI, and a verified prerelease remain outstanding. See `FEATURE_PARITY.md` and `TEST_REPORT.md` for current coverage and gaps.

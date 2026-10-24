@@ -1265,6 +1265,32 @@ fn curved_face_refill_keeps_its_pick_but_rejects_points_outside_the_mesh_toleran
 }
 
 #[test]
+fn touch_selection_uses_a_finger_sized_hit_slop_without_widening_mouse_picks() {
+    let mut app = app_with(json!([
+        {"command":"sketch.create","params":{"plane":"XY","name":"Touch targets"}},
+        {"command":"sketch.line","params":{"points":[[-50,0],[50,0]],"ids":["edge"],"infer":false}}
+    ]));
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 800.0));
+    let proj = crate::viewport::projection(&app, rect);
+    let start = proj.to_screen(Vec3::new(-50.0, 0.0, 0.0)).unwrap();
+    let end = proj.to_screen(Vec3::new(50.0, 0.0, 0.0)).unwrap();
+    let direction = end - start;
+    let normal = egui::vec2(-direction.y, direction.x).normalized();
+    let offset_pick = start + direction * 0.5 + normal * 10.0;
+
+    let mouse_hits = crate::viewport::pick(&app, &proj, offset_pick);
+    assert!(!mouse_hits.iter().any(|hit| matches!(hit, crate::viewport::Hit::SketchCurve { .. })));
+
+    app.viewport.touch_pick = true;
+    let touch_hits = crate::viewport::pick(&app, &proj, offset_pick);
+    assert!(touch_hits.iter().any(|hit| matches!(hit, crate::viewport::Hit::SketchCurve { id, .. } if id == "edge")));
+
+    app.viewport.touch_pick = false;
+    let mouse_hits_again = crate::viewport::pick(&app, &proj, offset_pick);
+    assert!(!mouse_hits_again.iter().any(|hit| matches!(hit, crate::viewport::Hit::SketchCurve { .. })));
+}
+
+#[test]
 fn thread_choices_apply_a_fine_pitch_and_partial_modelled_thread() {
     let mut h = crate::scenario::Harness::new();
     h.app.run("solid.cylinder", json!({"radius":4,"height":10})).unwrap();

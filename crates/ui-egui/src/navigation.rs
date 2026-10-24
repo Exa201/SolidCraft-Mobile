@@ -951,10 +951,28 @@ mod tests {
             out.textures_delta.clear();
         };
 
+        frame(&mut h, vec![touch(9, egui::TouchPhase::Start, egui::pos2(8.0, 8.0))]);
+        assert!(!h.app.viewport.touch_pick, "a touch outside the viewport must not widen CAD hit targets");
+        frame(&mut h, vec![touch(9, egui::TouchPhase::End, egui::pos2(8.0, 8.0))]);
+
+        frame(&mut h, vec![touch(7, egui::TouchPhase::Start, centre)]);
+        frame(&mut h, vec![touch(8, egui::TouchPhase::Start, egui::pos2(8.0, 8.0))]);
+        frame(&mut h, vec![touch(7, egui::TouchPhase::End, centre)]);
+        assert!(h.app.viewport.touch_pick, "the viewport touch release frame retains finger-sized targets");
+        frame(&mut h, vec![pointer(centre)]);
+        assert!(!h.app.viewport.touch_pick, "an outside UI touch cannot keep viewport targets widened");
+        frame(&mut h, vec![touch(8, egui::TouchPhase::End, egui::pos2(8.0, 8.0))]);
+
         let before = h.app.cam;
         // egui starts its multi-touch gesture only when a pointer position was already
         // established in a preceding frame, matching the platform event ordering.
         frame(&mut h, vec![pointer(centre)]);
+        frame(&mut h, vec![touch(3, egui::TouchPhase::Start, centre)]);
+        assert!(h.app.viewport.touch_pick, "a single-finger viewport touch should enable finger-sized selection targets");
+        frame(&mut h, vec![touch(3, egui::TouchPhase::End, centre)]);
+        assert!(h.app.viewport.touch_pick, "the touch release frame still owns the selection event");
+        frame(&mut h, vec![pointer(centre)]);
+        assert!(!h.app.viewport.touch_pick, "mouse frames should restore precise CAD hit targets");
         frame(&mut h, vec![touch(1, egui::TouchPhase::Start, left), touch(2, egui::TouchPhase::Start, right)]);
         assert!(h.ctx.input(|i| i.multi_touch().is_some()), "egui should recognize two active touch points");
         frame(
@@ -1011,6 +1029,7 @@ mod tests {
         frame(&mut h, vec![egui::Event::PointerMoved(outside)]);
         frame(&mut h, vec![touch(1, egui::TouchPhase::Start), touch(2, egui::TouchPhase::Start)]);
         assert!(!h.app.viewport.touch_navigation_active, "touches outside the viewport must not claim CAD navigation");
+        assert!(!h.app.viewport.touch_pick, "touches outside the viewport must not widen CAD hit targets");
     }
 
     #[test]
