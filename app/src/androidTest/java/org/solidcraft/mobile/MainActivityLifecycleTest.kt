@@ -29,9 +29,20 @@ class MainActivityLifecycleTest {
 
         var originalActivity: MainActivity? = null
         var originalRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        scenario.moveToState(Lifecycle.State.STARTED)
+        scenario.onActivity { activity ->
+            assertTrue("GameActivity's window should stay attached while paused", activity.window.decorView.isAttachedToWindow)
+            assertTrue("Activity should remain started while paused", activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+            assertFalse("Activity should leave RESUMED while paused", activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        scenario.moveToState(Lifecycle.State.RESUMED)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
         scenario.onActivity { activity ->
             originalActivity = activity
             originalRequestedOrientation = activity.requestedOrientation
+            assertTrue("Activity should resume after the pause transition", activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+            assertTrue("GameActivity's window should remain attached after resume", activity.window.decorView.isAttachedToWindow)
             assertSystemBarsHidden(activity, "after resume")
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
