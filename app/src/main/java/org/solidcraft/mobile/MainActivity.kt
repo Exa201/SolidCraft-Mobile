@@ -107,7 +107,7 @@ class MainActivity : GameActivity() {
                 documentPreferences().edit().putString(staged.absolutePath, mapping.toString()).apply()
             } else {
                 val input = requireNotNull(contentResolver.openInputStream(uri)) { "The selected document could not be opened" }
-                input.use { stream -> staged.outputStream().use { output -> stream.copyTo(output) } }
+                DocumentStaging.replaceFrom(input, staged)
                 val mapping = JSONObject().put("uri", uri.toString())
                     .put("writable", allowed and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
                 documentPreferences().edit().putString(staged.absolutePath, mapping.toString()).apply()
