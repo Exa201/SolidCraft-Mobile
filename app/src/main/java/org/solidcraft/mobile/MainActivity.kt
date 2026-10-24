@@ -161,39 +161,14 @@ class MainActivity : GameActivity() {
             val stagedPath = requireNotNull(request.stagedPath) { "The staged glTF file is missing" }
             val targetRoot = requireNotNull(File(stagedPath).parentFile) { "The glTF working folder is missing" }
             val tree = requireNotNull(DocumentFile.fromTreeUri(this, treeUri)) { "The selected folder is unavailable" }
-            val required = request.resourcePaths.toSet()
-            val copied = mutableSetOf<String>()
-            var visited = 0
-            var copiedBytes = 0L
-
-            fun visit(folder: DocumentFile, prefix: String, depth: Int) {
-                require(depth <= 32) { "The selected folder is nested too deeply" }
-                for (child in folder.listFiles()) {
-                    visited += 1
-                    require(visited <= 10_000) { "The selected folder contains too many entries" }
-                    val name = child.name ?: continue
-                    if (name == "." || name == ".." || '/' in name || '\\' in name) continue
-                    val relative = if (prefix.isEmpty()) name else "$prefix/$name"
-                    if (child.isDirectory) {
-                        if (required.any { it.startsWith("$relative/") }) visit(child, relative, depth + 1)
-                    } else if (child.isFile && relative in required) {
-                        val target = File(targetRoot, relative).canonicalFile
-                        val rootPath = targetRoot.canonicalPath + File.separator
-                        check(target.path.startsWith(rootPath)) { "The glTF resource path leaves its working folder" }
-                        check(target.parentFile?.isDirectory == true || target.parentFile?.mkdirs() == true) {
-                            "Could not create a glTF resource subfolder"
-                        }
-                        val source = requireNotNull(contentResolver.openInputStream(child.uri)) { "Could not open glTF buffer $relative" }
-                        DocumentStaging.replaceFrom(source, target, MAX_GLTF_BUFFER_BYTES - copiedBytes)
-                        copiedBytes += target.length()
-                        copied += relative
-                    }
-                }
-            }
-
-            visit(tree, "", 0)
-            val missing = required - copied
-            check(missing.isEmpty()) { "The selected folder is missing: ${missing.sorted().joinToString()}" }
+            fun entry(file: DocumentFile): ExternalResourceEntry = ExternalResourceEntry(
+                name = file.name,
+                isDirectory = file.isDirectory,
+                isFile = file.isFile,
+                children = { file.listFiles().map(::entry) },
+                open = { contentResolver.openInputStream(file.uri) },
+            )
+            ExternalResourceStaging.copyRequired(entry(tree), targetRoot, request.resourcePaths, MAX_GLTF_BUFFER_BYTES)
             results[request.id] = stagedPath
         } catch (error: Exception) {
             runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Could not copy the glTF buffers"}", Toast.LENGTH_LONG).show() }
