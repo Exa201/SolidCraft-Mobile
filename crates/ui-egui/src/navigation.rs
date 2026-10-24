@@ -998,6 +998,54 @@ mod tests {
     }
 
     #[test]
+    fn three_finger_drag_orbits_the_viewport_camera_without_editing_the_model() {
+        use super::*;
+        let mut h = crate::scenario::Harness::new();
+        h.frames(2);
+        let rect = h.app.viewport.rect.expect("the model viewport is laid out");
+        let centre = rect.center();
+        let initial_camera = h.app.cam;
+        let initial_design = h.app.session.design().into_owned();
+        let device = egui::TouchDeviceId(3);
+        let points = [egui::vec2(-48.0, -28.0), egui::vec2(48.0, -28.0), egui::vec2(0.0, 48.0)];
+        let pointer = |pos| egui::Event::PointerMoved(pos);
+        let touch = |id, phase, pos| egui::Event::Touch { device_id: device, id: egui::TouchId(id), phase, pos, force: None };
+        let frame = |h: &mut crate::scenario::Harness, events| {
+            let time = h.ctx.input(|i| i.time) + 1.0 / 60.0;
+            let raw = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1600.0, 1000.0))),
+                time: Some(time),
+                focused: true,
+                events,
+                ..Default::default()
+            };
+            let app = &mut h.app;
+            let mut out = h.ctx.run_ui(raw, |ui| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            });
+            out.textures_delta.clear();
+        };
+
+        frame(&mut h, vec![pointer(centre)]);
+        frame(&mut h, points.iter().enumerate().map(|(index, offset)| touch(index as u64 + 1, egui::TouchPhase::Start, centre + *offset)).collect());
+        assert!(h.ctx.input(|i| i.multi_touch().is_some_and(|info| info.num_touches == 3)), "egui should recognize three active viewport touches");
+        frame(
+            &mut h,
+            points
+                .iter()
+                .enumerate()
+                .map(|(index, offset)| touch(index as u64 + 1, egui::TouchPhase::Move, centre + *offset + egui::vec2(24.0, 16.0)))
+                .chain([pointer(centre)])
+                .collect(),
+        );
+
+        assert!(h.app.viewport.touch_navigation_active, "the three-finger stream should claim viewport navigation");
+        assert_ne!(h.app.cam, initial_camera, "three-finger drag should rotate the camera");
+        assert_eq!(h.app.session.design().as_ref(), &initial_design, "view navigation must not modify the CAD document");
+    }
+
+    #[test]
     fn two_finger_touch_outside_the_viewport_does_not_capture_navigation() {
         use super::*;
         let mut h = crate::scenario::Harness::new();
