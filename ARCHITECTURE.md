@@ -47,7 +47,7 @@ The existing Rust UI switches the command ribbon to compact icon presentation be
 
 - `FEATURE_PARITY.md` inventories 405 registered desktop commands plus one command marked planned by the original source. Shared Rust implementation is not treated as proof of Android device behavior.
 - Android Kotlin unit tests cover CAD MIME mappings, SAF filter behavior, safe relative glTF paths, sidecar discovery, and GLB little-endian JSON extraction.
-- The API 36 emulator has verified SAF Save As to Downloads, process restart, opening that CAD model through DocumentsUI, and Open Recent listing it afterward; asynchronous DXF export through Downloads was also verified in an earlier emulator pass.
+- The API 36 emulator has verified SAF Save As to Downloads, process restart, opening through DocumentsUI, Open Recent persistence, and overwriting the same SAF document with an added body before reopening; asynchronous DXF export through Downloads was also verified in an earlier emulator pass.
 - Rust host tests cover navigation, touch ownership and expanded selection hit slop. They do not prove physical-device touch precision.
 - A full `cargo xtask ci` run for the exact working tree is in progress; `TEST_REPORT.md` records completed subtests and must be updated with its final result.
 - The latest debug APK including wgpu initialization has been installed and verified with an interactive box-creation flow on the API 36 emulator. Physical-device rendering and production signing remain unverified.
