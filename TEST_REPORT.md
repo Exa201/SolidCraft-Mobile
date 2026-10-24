@@ -71,3 +71,9 @@
 The 3.11 runtime was installed under the user-local tooling directory only; no Python runtime or generated `.pyc` files are part of the repository. The full offline web test remains unverified because Chrome is unavailable in this environment.
 
 A successful APK build alone is not a release-quality result.
+
+## Current host verification (2026-10-24)
+
+After making external glTF sidecar staging atomic and size bounded, `:app:testDebugUnitTest :app:assembleDebug` passed locally. The suite contains 26 tests: 13 CAD document/glTF tests, 5 atomic staging tests, and 8 provider save-transaction tests; 0 failures and 0 errors. New staging cases verify that a failed size-limit check preserves an existing sidecar and cleans up its temporary file, and that a resource exactly at the limit is fully staged.
+
+The resulting debug APK is 176,878,594 bytes with SHA-256 `E8CC1AFD7F6CF1AD05A4F826204FD1C079719F378052B744FE122DECE0211D0F`. It was installed on API-36 emulator `emulator-5558`, launched to the top-resumed SolidCraft activity, and displayed the CAD interface and rendered viewport; sampled logcat contained no fatal exception or Rust panic. This smoke check does not exercise glTF folder selection on a provider or any CAD modeling workflow. GitHub Android APK workflow 40085051272 was in progress and full CI workflow 40085051273 was pending when checked; packaging lint workflow 40085051270 passed. No result is claimed for the pending workflows.

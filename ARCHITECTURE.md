@@ -29,6 +29,8 @@ The engine accepts filesystem paths, so SAF documents are copied into durable ap
 
 For glTF documents with external relative buffers, Kotlin parses the glTF JSON or GLB v2 JSON chunk, rejects unsafe paths, and asks the user to select the buffer folder. Only referenced files are copied into the staged document directory, with traversal and size limits. GLB integer fields are little-endian. File-picker cancellation resolves as no selection.
 
+External glTF buffers use the same fsync-and-atomic-replace staging path as opened CAD documents. A provider read failure or a buffer that exceeds the remaining 1 GiB import budget therefore leaves any previous staged buffer intact; no partially copied buffer is exposed to the Rust importer.
+
 The Rust Android entry points eframe persistence and the shared recovery service at app-private paths. Preferences and recent documents are saved by eframe; the recovery service uses SolidCraft's existing autosave interval and document recovery logic. The Android host uses a cached JNI global class reference created on the UI thread because class lookup from a native worker thread failed in device testing.
 
 ## Input, viewport and rendering

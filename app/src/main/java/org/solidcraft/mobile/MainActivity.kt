@@ -184,11 +184,8 @@ class MainActivity : GameActivity() {
                             "Could not create a glTF resource subfolder"
                         }
                         val source = requireNotNull(contentResolver.openInputStream(child.uri)) { "Could not open glTF buffer $relative" }
-                        source.use { input ->
-                            target.outputStream().use { output ->
-                                copiedBytes += copyLimited(input, output, MAX_GLTF_BUFFER_BYTES - copiedBytes)
-                            }
-                        }
+                        DocumentStaging.replaceFrom(source, target, MAX_GLTF_BUFFER_BYTES - copiedBytes)
+                        copiedBytes += target.length()
                         copied += relative
                     }
                 }
@@ -202,19 +199,6 @@ class MainActivity : GameActivity() {
             runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Could not copy the glTF buffers"}", Toast.LENGTH_LONG).show() }
             results[request.id] = ""
         }
-    }
-
-    private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {
-        val buffer = ByteArray(64 * 1024)
-        var total = 0L
-        while (true) {
-            val count = input.read(buffer)
-            if (count < 0) break
-            total += count
-            check(total <= limit) { "A glTF buffer is larger than the Android import limit" }
-            output.write(buffer, 0, count)
-        }
-        return total
     }
 
     private fun queryDisplayName(uri: Uri): String? {

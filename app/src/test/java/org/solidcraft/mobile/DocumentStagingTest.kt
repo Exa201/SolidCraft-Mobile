@@ -64,6 +64,32 @@ class DocumentStagingTest {
         assertEquals(emptyList<String>(), directory.list()?.toList())
     }
 
+    @Test
+    fun oversizedExternalResourceKeepsExistingFileAndRemovesPartialStage() = withWorkspace { directory ->
+        val target = File(directory, "buffers/mesh.bin").apply {
+            parentFile!!.mkdirs()
+            writeText("previous complete buffer")
+        }
+
+        try {
+            DocumentStaging.replaceFrom(ByteArrayInputStream("too large".toByteArray()), target, maxBytes = 4)
+            throw AssertionError("An external resource above the limit must be rejected")
+        } catch (error: IllegalStateException) {
+            assertEquals("The document exceeds the Android import size limit", error.message)
+        }
+
+        assertEquals("previous complete buffer", target.readText())
+        assertEquals(listOf("mesh.bin"), target.parentFile!!.list()!!.toList())
+    }
+
+    @Test
+    fun resourceAtExactSizeLimitIsStagedCompletely() = withWorkspace { directory ->
+        val target = File(directory, "buffers/mesh.bin")
+        DocumentStaging.replaceFrom(ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)), target, maxBytes = 4)
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4), target.readBytes())
+        assertEquals(listOf("mesh.bin"), target.parentFile!!.list()!!.toList())
+    }
+
     private fun withWorkspace(test: (File) -> Unit) {
         val directory = Files.createTempDirectory("solidcraft-open-test-").toFile()
         try {
