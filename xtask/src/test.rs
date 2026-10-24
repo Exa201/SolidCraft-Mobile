@@ -1,8 +1,9 @@
-//! `cargo xtask test`: build the workspace's tests once, then run every test binary at the same
-//! time. `cargo test` runs them one after another, so one slow binary held up all the others;
-//! the doc tests and any other `side` jobs run alongside on their own thread.
+//! `cargo xtask test`: build the workspace's tests once, then run test binaries with bounded
+//! parallelism. Running every binary at once can exhaust memory and GPU resources; doc tests
+//! and any other `side` jobs run alongside on their own thread.
 
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -23,14 +24,25 @@ pub fn run(cargo_args: &[&str], test_args: &[&str], side: Vec<(String, Command)>
     let start = Instant::now();
     let (tx, rx) = mpsc::channel::<(String, Result<String, String>, f64)>();
     let mut failed = Vec::new();
+    let next = AtomicUsize::new(0);
     std::thread::scope(|scope| {
-        for b in &bins {
+        // The workspace contains GPU, geometry, and UI test binaries that each use significant
+        // memory. Keep a small fixed number of processes active instead of spawning all 79 at
+        // once. Each Rust test binary also gets a bounded internal worker count.
+        let workers = bins.len().min(2);
+        for _ in 0..workers {
             let tx = tx.clone();
+            let next = &next;
+            let bins = &bins;
             scope.spawn(move || {
-                let t0 = Instant::now();
-                let mut c = Command::new(&b.exe);
-                c.args(test_args).current_dir(&b.dir).env("CARGO_MANIFEST_DIR", &b.dir);
-                let _ = tx.send((b.label.clone(), finish(c), t0.elapsed().as_secs_f64()));
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(b) = bins.get(index) else { break };
+                    let t0 = Instant::now();
+                    let mut c = Command::new(&b.exe);
+                    c.args(test_args).current_dir(&b.dir).env("CARGO_MANIFEST_DIR", &b.dir).env("RUST_TEST_THREADS", "2");
+                    let _ = tx.send((b.label.clone(), finish(c), t0.elapsed().as_secs_f64()));
+                }
             });
         }
         let tx_side = tx.clone();

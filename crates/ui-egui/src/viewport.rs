@@ -58,6 +58,10 @@ pub struct ViewportState {
     pub(crate) tool_click: bool,
     /// A Trim drag is drawing its path (`sketch_tools::trim_drag_*`).
     pub(crate) trim_drag: bool,
+    /// A touch is active in the viewport this frame; widen geometric hit targets for fingers.
+    pub(crate) touch_pick: bool,
+    /// Touch IDs that began or moved inside the viewport, so unrelated UI touches do not widen picks.
+    touch_pick_ids: Vec<(egui::TouchDeviceId, egui::TouchId)>,
     /// Per-body boxes of one world state, held (not just its address, which a later state can
     /// reuse once the old one is freed, so stale boxes would come back).
     pick_bounds: std::sync::Mutex<Option<BodyBounds>>,
@@ -126,6 +130,9 @@ pub struct ViewportState {
     pub device_motion: Option<crate::space_mouse::DeviceMotion>,
     /// After immediate zoom, ignore egui's outstanding smoothing until the gesture ends.
     pub(crate) wheel_zoom_raw_until_idle: bool,
+    /// A multitouch navigation gesture owns the pointer until every finger is lifted. This keeps
+    /// the primary-touch mouse emulation from selecting or dragging geometry during navigation.
+    pub(crate) touch_navigation_active: bool,
     /// While trackpad scrolling runs, ignore egui's smoothing tail for zoom so
     /// two-finger input is not replayed as zoom after it pans.
     pub(crate) trackpad_until_idle: bool,
@@ -1347,6 +1354,7 @@ pub(crate) fn pick_cached(app: &mut SolveApp, proj: &Proj, pos: Pos2) -> Vec<Hit
     app.dialog.as_ref().and_then(|d| d.active_input()).map(|i| i.accept).hash(&mut h);
     app.session.visibility.hidden_bodies.hash(&mut h);
     app.session.visibility.hidden_occurrences.hash(&mut h);
+    app.viewport.touch_pick.hash(&mut h);
     origin_point_shown(app).hash(&mut h);
     app.perspective_view().hash(&mut h);
     (proj.rect.width().to_bits(), proj.rect.height().to_bits()).hash(&mut h);
@@ -1438,6 +1446,14 @@ impl<T: PartialOrd + Copy> Near<T> {
 }
 
 fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, all: bool) -> Vec<Hit> {
+    // A fingertip obscures more of the viewport than a mouse cursor. Expand only the screen-space
+    // hit slop for point-like geometry; face ray casting and the mouse's precise defaults remain.
+    let touch_scale = if app.viewport.touch_pick { 2.5 } else { 1.0 };
+    let point_reach = 8.0 * touch_scale;
+    let curve_reach = 6.0 * touch_scale;
+    let vertex_reach = 7.0 * touch_scale;
+    let edge_reach = 6.0 * touch_scale;
+    let axis_reach = 5.0 * touch_scale;
     let s = &app.session;
     let st = crate::open_meshing::shown_world(app);
     let bounds = body_bounds(app, &st);
@@ -1463,7 +1479,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
             }
             if let Some(sp) = proj.to_screen(ss.plane.to_world(p.pos)) {
                 let dd = sp.distance(pos) - if s.active_sketch == Some(sid) { 2.0 } else { 0.0 };
-                if dd < 8.0 && best.wants(dd) {
+                if dd < point_reach && best.wants(dd) {
                     best.offer(dd, Hit::SketchPoint { sketch: sid, id: p.id.clone(), at: p.pos });
                 }
             }
@@ -1484,7 +1500,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
                 let pts: Vec<Pos2> = part.iter().filter_map(|q| proj.to_screen(*q)).collect();
                 for w in pts.windows(2) {
                     let dd = seg_dist(pos, w[0], w[1]) - bonus;
-                    if dd < 6.0 && bestc.wants(dd) {
+                    if dd < curve_reach && bestc.wants(dd) {
                         bestc.offer(dd, Hit::SketchCurve { sketch: sid, id: c.id.clone(), straight });
                     }
                 }
@@ -1495,7 +1511,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
             let pts: Vec<Pos2> = w.pts.iter().filter_map(|q| proj.to_screen(*q)).collect();
             for seg in pts.windows(2) {
                 let dd = seg_dist(pos, seg[0], seg[1]) - bonus;
-                if dd < 6.0 && bestc.wants(dd) {
+                if dd < curve_reach && bestc.wants(dd) {
                     bestc.offer(dd, Hit::SketchCurve { sketch: sid, id: w.id.clone(), straight: false });
                 }
             }
@@ -1540,7 +1556,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
     let wireframe = app.ui.visual_style == 2;
     let visible = |p: Vec3| wireframe || bestf.as_ref().is_none_or(|(t, _)| (p - o).dot(d) <= *t + slack);
     // Vertices (edge end points) and edges, within 7 and 6 points of the cursor.
-    let reach = crate::pick_index::reach(proj, pos, 8.0);
+    let reach = crate::pick_index::reach(proj, pos, point_reach);
     let mut bestv = Near::new(all);
     let mut beste = Near::new(all);
     for (i, b) in st.bodies.iter().enumerate() {
@@ -1549,7 +1565,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
         }
         // Only bodies whose outline on screen is near the cursor can have an edge under it.
         if let Some((_, bb)) = bounds.get(i)
-            && screen_box(proj, bb, 8.0).is_some_and(|r| !r.contains(pos))
+            && screen_box(proj, bb, point_reach).is_some_and(|r| !r.contains(pos))
         {
             continue;
         }
@@ -1572,7 +1588,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
                 for v in [e.first(), e.last()].into_iter().flatten().map(|v| at(*v)) {
                     if let Some(sp) = proj.to_screen(v) {
                         let dd = sp.distance(pos);
-                        if dd < 7.0 && visible(v) && bestv.wants(dd) {
+                        if dd < vertex_reach && visible(v) && bestv.wants(dd) {
                             bestv.offer(dd, Hit::Vertex { body: b.name.clone(), point: v });
                         }
                     }
@@ -1583,7 +1599,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
             let dd = seg_dist(pos, a, c);
             // Visible where the cursor is: the edge's point under the cursor, not an end or
             // the middle, which can lie deeper than the face the cursor is on.
-            if dd < 6.0 && beste.wants(dd) && visible(ray_segment_closest(o, d, p0, p1)) {
+            if dd < edge_reach && beste.wants(dd) && visible(ray_segment_closest(o, d, p0, p1)) {
                 beste.offer(dd, Hit::Edge { body: b.name.clone(), index: ei, mid: at(polyline_mid(e)) });
             }
         }
@@ -1594,7 +1610,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
         && let Some(sp) = proj.to_screen(Vec3::ZERO)
     {
         let dd = sp.distance(pos);
-        if dd < 7.0 && bestv.wants(dd) {
+        if dd < vertex_reach && bestv.wants(dd) {
             bestv.offer(dd, Hit::Vertex { body: String::new(), point: Vec3::ZERO });
         }
     }
@@ -1606,7 +1622,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
     for (name, dir) in origin_axes(app) {
         if let (Some(a), Some(b)) = (proj.to_screen(Vec3::ZERO), proj.to_screen(dir * (size * AXIS_LEN))) {
             let dd = seg_dist(pos, a, b);
-            if dd < 5.0 && besta.wants(dd) {
+            if dd < axis_reach && besta.wants(dd) {
                 besta.offer(dd, Hit::Axis { name: name.into() });
             }
         }
@@ -1615,7 +1631,7 @@ fn pick_hits(app: &SolveApp, proj: &Proj, pos: Pos2, other_sketch_points: bool, 
     for (name, a, b) in construction_axis_segments(app) {
         if let (Some(a), Some(b)) = (proj.to_screen(a), proj.to_screen(b)) {
             let dd = seg_dist(pos, a, b);
-            if dd < 5.0 && besta.wants(dd) {
+            if dd < axis_reach && besta.wants(dd) {
                 besta.offer(dd, Hit::Axis { name });
             }
         }
@@ -2556,6 +2572,33 @@ pub(crate) fn preview_should_roll_back(app: &SolveApp, held: crate::tool_modifie
 pub fn show(app: &mut SolveApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let rect = ui.max_rect();
+    let previous_touch_ids = &app.viewport.touch_pick_ids;
+    let (touch_pick_ids, released_viewport_touch) = ui.input(|input| {
+        let mut active = previous_touch_ids.clone();
+        let mut released_viewport_touch = false;
+        for event in &input.events {
+            let egui::Event::Touch { device_id, id, phase, pos, .. } = event else { continue };
+            let touch = (*device_id, *id);
+            match phase {
+                egui::TouchPhase::Start if rect.contains(*pos) && !active.contains(&touch) => active.push(touch),
+                egui::TouchPhase::Move if rect.contains(*pos) && !active.contains(&touch) => active.push(touch),
+                egui::TouchPhase::End | egui::TouchPhase::Cancel => {
+                    if let Some(index) = active.iter().position(|candidate| *candidate == touch) {
+                        active.remove(index);
+                        released_viewport_touch = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !input.focused {
+            active.clear();
+            released_viewport_touch = false;
+        }
+        (active, released_viewport_touch)
+    });
+    app.viewport.touch_pick = !touch_pick_ids.is_empty() || released_viewport_touch;
+    app.viewport.touch_pick_ids = touch_pick_ids;
     app.viewport.rect = Some(rect);
     refresh_layout(app, ui.ctx().pixels_per_point());
     let resp = ui.interact(rect, ui.id().with("viewport"), Sense::click_and_drag());
@@ -5869,6 +5912,35 @@ mod tests {
         }
         assert_eq!(h.app.cam.distance, after.distance);
         assert_ne!(h.app.cam.target, after.target);
+    }
+
+    #[test]
+    fn touch_long_press_opens_the_viewport_context_menu() {
+        let ctx = crate::fonts::test_context();
+        ctx.options_mut(|options| options.input_options.max_click_duration = 0.2);
+        let mut app = hover_app(false);
+        hover_frame(&mut app, &ctx, vec![]);
+        let point = app.viewport.rect.unwrap().center();
+        let device = egui::TouchDeviceId(9);
+        hover_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(point)]);
+        hover_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::Touch { device_id: device, id: egui::TouchId(0), phase: egui::TouchPhase::Start, pos: point, force: None },
+                egui::Event::PointerButton { pos: point, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::default() },
+            ],
+        );
+        assert!(app.viewport.context_menu.is_none(), "a touch press alone should not open a menu");
+
+        for _ in 0..20 {
+            hover_frame(&mut app, &ctx, vec![]);
+            if app.viewport.context_menu.is_some() {
+                break;
+            }
+        }
+
+        assert_eq!(app.viewport.context_menu, Some(point), "holding one finger should trigger the context menu");
     }
 
     #[test]

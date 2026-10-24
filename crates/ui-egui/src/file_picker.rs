@@ -17,6 +17,7 @@ type Completion = Box<dyn FnOnce(&mut SolveApp, Option<String>)>;
 pub(crate) struct Pending {
     future: FilePickerFuture,
     complete: Completion,
+    save_path: Option<String>,
 }
 
 struct Repaint(egui::Context);
@@ -44,7 +45,7 @@ impl SolveApp {
             return;
         }
         let future = self.services.pick_open.as_ref().map(|pick| pick(extensions));
-        self.begin_picker(future, Box::new(complete));
+        self.begin_picker(future, Box::new(complete), None);
     }
 
     /// Ask for one file of a kind (`label`, `extensions`), with the host's dialog for it, or the
@@ -59,7 +60,7 @@ impl SolveApp {
             Some(pick) => Some(pick(label, extensions)),
             None => self.services.pick_open.as_ref().map(|pick| pick(extensions)),
         };
-        self.begin_picker(future, Box::new(complete));
+        self.begin_picker(future, Box::new(complete), None);
     }
 
     pub(crate) fn pick_save(&mut self, name: &str, extensions: &[&str], complete: impl FnOnce(&mut SolveApp, Option<String>) + 'static) {
@@ -67,7 +68,7 @@ impl SolveApp {
             return;
         }
         let future = self.services.pick_save.as_ref().map(|pick| pick(name, extensions));
-        self.begin_picker(future, Box::new(complete));
+        self.begin_picker(future, Box::new(complete), Some(String::new()));
     }
 
     /// Ask for a program (a slicer). Without a host dialog, the answer is a cancel.
@@ -76,15 +77,15 @@ impl SolveApp {
             return;
         }
         let future = self.services.pick_program.as_ref().map(|pick| pick());
-        self.begin_picker(future, Box::new(complete));
+        self.begin_picker(future, Box::new(complete), None);
     }
 
-    fn begin_picker(&mut self, future: Option<FilePickerFuture>, complete: Completion) {
+    fn begin_picker(&mut self, future: Option<FilePickerFuture>, complete: Completion, save_path: Option<String>) {
         let Some(future) = future else {
             complete(self, None);
             return;
         };
-        self.file_picker = Some(Pending { future, complete });
+        self.file_picker = Some(Pending { future, complete, save_path });
     }
 
     pub(crate) fn pick_open_command(&mut self, command: &str, params: Value, extensions: &[&str]) {
@@ -129,8 +130,12 @@ pub(crate) fn tick(app: &mut SolveApp, ctx: &egui::Context) {
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
         return;
     };
-    if let Some(pending) = app.file_picker.take() {
+    if let Some(mut pending) = app.file_picker.take() {
+        let save_path = pending.save_path.take().and_then(|_| path.clone());
         (pending.complete)(app, path);
+        if let Some(path) = save_path {
+            crate::save_job::picker_save_completed(app, &path);
+        }
         // Hosts can flush writes or restore native input on the following frame.
         ctx.request_repaint();
     }

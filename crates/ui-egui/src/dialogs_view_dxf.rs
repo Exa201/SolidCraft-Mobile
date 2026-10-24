@@ -90,6 +90,13 @@ mod tests {
         h.step(&json!({"key":"Tab"})).unwrap();
         h.step(&json!({"click":{"handle":"dialog:dxf:dashed"}})).unwrap();
         let dir = h.dir.clone();
+        let persisted_size = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let persisted_size_in_worker = persisted_size.clone();
+        h.app.services.persist_document_save = Some(std::sync::Arc::new(move |path| {
+            let size = std::fs::metadata(path).map_err(|error| error.to_string())?.len();
+            *persisted_size_in_worker.lock().map_err(|error| error.to_string())? = Some(size);
+            Ok(())
+        }));
         h.app.services.pick_save = Some(Box::new(move |name, extensions| {
             assert!(name.ends_with("-view.dxf"));
             assert_eq!(extensions, &["dxf"]);
@@ -99,6 +106,10 @@ mod tests {
         wait_for_export(&mut h);
         let text = std::fs::read_to_string(h.dir.join("view.dxf")).unwrap();
         assert!(text.contains("LWPOLYLINE") && text.contains("HIDDEN"));
+        assert!(
+            persisted_size.lock().unwrap().is_some_and(|size| size > 0),
+            "provider writeback must run after the asynchronous export has produced the file"
+        );
         assert!(h.app.dialog.is_none() && h.app.preferences.view_dxf_dashed);
         let saved = h.app.prefs();
         let mut restored = SolveApp::new(Default::default(), Default::default());

@@ -1474,6 +1474,27 @@ where
     let mut empty_votes = 0;
     let mut empty_diagnostics = crate::BooleanDiagnostics::default();
     let keep: Vec<Vec<Vec3>> = a.split_keep().iter().chain(b.split_keep()).cloned().collect();
+    let sphere = |body: &Body| {
+        let mut faces = body.solid.face_iter();
+        let crate::surface_kind::FaceSurface::Sphere { center, radius } = crate::surface_kind::surface_of(faces.next()?, size)? else {
+            return None;
+        };
+        let consistent = faces.all(|face| {
+            matches!(crate::surface_kind::surface_of(face, size), Some(crate::surface_kind::FaceSurface::Sphere { center: other, radius: r })
+                if center.dist(other) <= size * 1e-6 && (radius - r).abs() <= size * 1e-6)
+        });
+        consistent.then_some((center, radius))
+    };
+    let shallow_sphere_pair = match (sphere(a), sphere(b)) {
+        (Some((ca, ra)), Some((cb, rb))) => {
+            let distance = ca.dist(cb);
+            let smaller = ra.min(rb);
+            let outside_lens = ra + rb - distance;
+            let inside_lens = distance - (ra - rb).abs();
+            (outside_lens > 0.0 && outside_lens < 0.25 * smaller) || (inside_lens > 0.0 && inside_lens < 0.25 * smaller)
+        }
+        _ => false,
+    };
     // The tolerances below follow the larger body. Where the bodies meet in a region much
     // smaller than that (a hole a few millimetres across drilled through a long part, whose tool
     // is longer still), they are as coarse as the tool itself: its intersection curves are
@@ -1493,7 +1514,8 @@ where
                 if x.area > 0.0 { 2.0 * x.volume.abs() / x.area } else { f64::INFINITY }
             };
             let feature = s.x.min(s.y).min(s.z).min(thickness(ma)).min(thickness(mb)).max(size * 1e-4);
-            if feature > 0.0 && feature * 2e-3 < size * 2.5e-4 { vec![(feature * 2e-3).max(1e-6), (feature * 5e-4).max(1e-6)] } else { Vec::new() }
+            let ratio = if matches!(op, BoolOp::Union | BoolOp::Intersect) || (op == BoolOp::Cut && shallow_sphere_pair) { 5e-4 } else { 2.5e-4 };
+            if feature > 0.0 && feature * 2e-3 < size * ratio { vec![(feature * 2e-3).max(1e-6), (feature * 5e-4).max(1e-6)] } else { Vec::new() }
         }
         _ => Vec::new(),
     };
@@ -1652,6 +1674,14 @@ where
             merge(empty_diagnostics);
             return Ok(None);
         }
+    }
+    // A narrow overlap can make the coarse retries miss the lens where two curved surfaces
+    // cross at a shallow angle. The same feature-scaled tolerances used for thin intersections
+    // are safe for either operation: `fine` checks the result volume before accepting it.
+    if (matches!(op, BoolOp::Union | BoolOp::Intersect) || (op == BoolOp::Cut && shallow_sphere_pair))
+        && let Some(body) = fine(&mut last)
+    {
+        return Ok(Some(body));
     }
     last.push_str(&apart_failed);
     // Coincident faces defeat the B-rep boolean; bodies with only planar faces have an exact
