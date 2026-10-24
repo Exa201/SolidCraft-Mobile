@@ -310,12 +310,12 @@ class MainActivity : GameActivity() {
                 val mapping = JSONObject(encoded)
                 if (!mapping.optBoolean("writable", false)) return "This source document is read-only. Use Save As to choose a writable location."
                 val staged = File(path)
-                if (!staged.isFile) return "The staged CAD file was not created"
                 val uri = Uri.parse(mapping.getString("uri"))
-                val output = activity.contentResolver.openOutputStream(uri, "wt")
-                    ?: return "The document provider did not open the destination for writing"
-                staged.inputStream().use { input -> output.use { input.copyTo(it) } }
-                ""
+                val backup = File(staged.parentFile, ".${staged.name}.save-backup")
+                DocumentWriteBack.persist(staged, backup, object : DocumentStreams {
+                    override fun openRead() = activity.contentResolver.openInputStream(uri)
+                    override fun openWrite() = activity.contentResolver.openOutputStream(uri, "wt")
+                })
             } catch (error: Exception) {
                 error.message ?: "Could not write the CAD file to the selected document provider"
             }
