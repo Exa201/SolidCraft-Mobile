@@ -18,7 +18,7 @@ internal object GltfExternalResources {
                 require(file.length() <= MAX_JSON_BYTES) { "The glTF document is too large" }
                 file.readText(Charsets.UTF_8)
             }
-            "glb" -> readGlbJson(file) ?: return emptyList()
+            "glb" -> readGlbJson(file)
             else -> return emptyList()
         }
         val buffers = JSONObject(json).optJSONArray("buffers") ?: return emptyList()
@@ -26,7 +26,8 @@ internal object GltfExternalResources {
         return buildList {
             for (index in 0 until buffers.length()) {
                 val uri = buffers.optJSONObject(index)?.optString("uri") ?: continue
-                if (uri.startsWith("data:", ignoreCase = true)) continue
+                // Match the Rust importer: only lowercase `data:` is an embedded buffer.
+                if (uri.startsWith("data:")) continue
                 add(safeRelativePath(uri))
             }
         }.distinct()
@@ -47,9 +48,9 @@ internal object GltfExternalResources {
         return segments.joinToString("/")
     }
 
-    private fun readGlbJson(file: File): String? {
+    private fun readGlbJson(file: File): String {
         RandomAccessFile(file, "r").use { input ->
-            if (input.length() < 20) return null
+            require(input.length() >= 20) { "The GLB file is too short to contain its JSON chunk" }
             require(input.readLittleEndianInt().toUInt() == GLB_MAGIC.toUInt()) { "Invalid GLB header" }
             require(input.readLittleEndianInt() == 2) { "Only GLB version 2 is supported" }
             val declaredLength = input.readLittleEndianInt().toLong() and 0xffffffffL
@@ -69,7 +70,7 @@ internal object GltfExternalResources {
                 remaining -= chunkLength
             }
         }
-        return null
+        error("The GLB file does not contain a JSON chunk")
     }
 
     private fun RandomAccessFile.readLittleEndianInt(): Int = Integer.reverseBytes(readInt())

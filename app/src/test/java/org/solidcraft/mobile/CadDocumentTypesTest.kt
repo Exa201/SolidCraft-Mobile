@@ -84,6 +84,17 @@ class CadDocumentTypesTest {
         }
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun gltfEmbeddedUriSchemeMatchesRustImporterCaseSensitivity() {
+        val file = File.createTempFile("solidcraft", ".gltf")
+        try {
+            file.writeText("""{"buffers":[{"uri":"DATA:application/octet-stream;base64,AA=="}]}""")
+            GltfExternalResources.bufferPaths(file)
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test
     fun glbReadsLittleEndianHeaderAndJsonChunk() {
         val json = """{"buffers":[{"uri":"buffers/mesh.bin"}]}""".toByteArray()
@@ -104,6 +115,39 @@ class CadDocumentTypesTest {
         try {
             file.writeBytes(bytes)
             assertEquals(listOf("buffers/mesh.bin"), GltfExternalResources.bufferPaths(file))
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun glbWithoutJsonChunkIsNotTreatedAsAValidEmptyResourceList() {
+        val file = File.createTempFile("solidcraft", ".glb")
+        try {
+            file.writeBytes(
+                ByteArrayOutputStream().also { output ->
+                    DataOutputStream(output).use { data ->
+                        fun intLe(value: Int) = data.writeInt(Integer.reverseBytes(value))
+                        intLe(0x46546c67)
+                        intLe(2)
+                        intLe(20)
+                        intLe(0)
+                        intLe(0x004e4942)
+                    }
+                }.toByteArray(),
+            )
+            GltfExternalResources.bufferPaths(file)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun truncatedGlbHeaderIsRejected() {
+        val file = File.createTempFile("solidcraft", ".glb")
+        try {
+            file.writeBytes(byteArrayOf(0x67, 0x6c, 0x54, 0x46))
+            GltfExternalResources.bufferPaths(file)
         } finally {
             file.delete()
         }
