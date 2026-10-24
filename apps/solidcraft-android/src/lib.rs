@@ -13,6 +13,10 @@ struct MobileApp {
 }
 
 impl eframe::App for MobileApp {
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        solidcraft_ui_egui::android_input::map_system_back_to_escape(raw_input);
+    }
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.solve.logic(ctx);
     }
@@ -45,13 +49,7 @@ fn android_main(app: AndroidApp) {
     let data_directory = app.internal_data_path();
     let persistence_path = data_directory.as_ref().map(|directory| directory.join("solidcraft-mobile.ron"));
     let recovery_directory = data_directory.map(|directory| directory.join("recovery"));
-    let options = eframe::NativeOptions {
-        android_app: Some(app),
-        persistence_path,
-        depth_buffer: 24,
-        stencil_buffer: 8,
-        ..Default::default()
-    };
+    let options = eframe::NativeOptions { android_app: Some(app), persistence_path, depth_buffer: 24, stencil_buffer: 8, ..Default::default() };
     let result = eframe::run_native(
         "SolidCraft",
         options,
