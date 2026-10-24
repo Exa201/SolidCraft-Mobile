@@ -10,6 +10,7 @@ SolidCraft Mobile currently starts the shared SolidCraft Rust engine and CAD int
 - Android GameActivity host with arm64-v8a native library.
 - Compile/target SDK 37, minimum API 28.
 - Android Storage Access Framework bridge for open/create-document requests, private staging, and URI writeback is implemented. Downloads provider open, Save As, reopen after process restart, and asynchronous DXF export passed on an API 36 emulator.
+- SAF writeback now fsyncs a local rollback copy and a hash marker before touching the provider; later saves can distinguish an already verified write from an interrupted one. JVM regression tests cover stale backup cleanup and unreadable-provider recovery. Provider-failure behavior has not yet been verified on device.
 - Android stores UI preferences and the Recent list in app-private eframe storage. SAF working copies use durable URI-stable paths and can be reopened from Recent after a process restart.
 - The shared unsaved-design recovery service now starts in an Android-private recovery directory using the saved autosave interval; forced-crash recovery on device still needs verification.
 - The CAD viewport now hides Android system bars so the top toolbar remains touchable; temporary system bars can still be revealed with an edge swipe.

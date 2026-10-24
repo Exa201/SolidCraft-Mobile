@@ -1,6 +1,7 @@
 package org.solidcraft.mobile
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,6 +11,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Files
+import java.security.MessageDigest
 
 class DocumentWriteBackTest {
     @Test
@@ -41,9 +43,52 @@ class DocumentWriteBackTest {
 
         assertTrue(firstResult.contains("recovery copy remains"))
         assertTrue(backup.isFile)
+        assertTrue(targetMarker(backup).isFile)
         assertTrue(DocumentWriteBack.persist(staged, backup, provider).isEmpty())
         assertArrayEquals(staged.readBytes(), provider.bytes)
         assertFalse(backup.exists())
+        assertFalse(targetMarker(backup).exists())
+    }
+
+    @Test
+    fun leftoverBackupForVerifiedSaveIsDiscardedInsteadOfRestored() = withFiles { staged, backup ->
+        val provider = MemoryDocument(staged.readBytes())
+        backup.writeBytes("older document".toByteArray())
+        targetMarker(backup).writeText(staged.sha256())
+
+        assertTrue(DocumentWriteBack.persist(staged, backup, provider).isEmpty())
+
+        assertArrayEquals(staged.readBytes(), provider.bytes)
+        assertFalse(backup.exists())
+        assertFalse(targetMarker(backup).exists())
+    }
+
+    @Test
+    fun unreadableProviderWithRecoveryBackupIsNotOverwritten() = withFiles { staged, backup ->
+        val provider = MemoryDocument("current provider data".toByteArray(), readable = false)
+        backup.writeBytes("older recovery data".toByteArray())
+        targetMarker(backup).writeText(staged.sha256())
+
+        val result = DocumentWriteBack.persist(staged, backup, provider)
+
+        assertTrue(result.contains("destination was not changed"))
+        assertArrayEquals("current provider data".toByteArray(), provider.bytes)
+        assertTrue(backup.isFile)
+        assertTrue(targetMarker(backup).isFile)
+        assertEquals(0, provider.writeCount)
+    }
+
+    @Test
+    fun unreadableProviderWithLegacyRecoveryBackupIsNotOverwritten() = withFiles { staged, backup ->
+        val provider = MemoryDocument("current provider data".toByteArray(), readable = false)
+        backup.writeBytes("older recovery data".toByteArray())
+
+        val result = DocumentWriteBack.persist(staged, backup, provider)
+
+        assertTrue(result.contains("destination was not changed"))
+        assertArrayEquals("current provider data".toByteArray(), provider.bytes)
+        assertTrue(backup.isFile)
+        assertEquals(0, provider.writeCount)
     }
 
     @Test
@@ -76,6 +121,11 @@ class DocumentWriteBackTest {
             directory.deleteRecursively()
         }
     }
+
+    private fun targetMarker(backup: File) = File(backup.parentFile, "${backup.name}.target-sha256")
+
+    private fun File.sha256(): String = MessageDigest.getInstance("SHA-256").digest(readBytes())
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private class MemoryDocument(
         initial: ByteArray,
