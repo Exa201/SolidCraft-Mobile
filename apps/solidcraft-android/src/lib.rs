@@ -45,7 +45,13 @@ fn android_main(app: AndroidApp) {
     let data_directory = app.internal_data_path();
     let persistence_path = data_directory.as_ref().map(|directory| directory.join("solidcraft-mobile.ron"));
     let recovery_directory = data_directory.map(|directory| directory.join("recovery"));
-    let options = eframe::NativeOptions { android_app: Some(app), persistence_path, ..Default::default() };
+    let options = eframe::NativeOptions {
+        android_app: Some(app),
+        persistence_path,
+        depth_buffer: 24,
+        stencil_buffer: 8,
+        ..Default::default()
+    };
     let result = eframe::run_native(
         "SolidCraft",
         options,
@@ -53,6 +59,12 @@ fn android_main(app: AndroidApp) {
             solidcraft_ui_egui::fonts::setup_bundled_fonts(&creation.egui_ctx);
             solidcraft_ui_egui::fonts::load_system_fonts_in_background(&creation.egui_ctx);
             let mut solve = SolveApp::new(Session::default(), storage::services());
+            if let Some(render_state) = &creation.wgpu_render_state {
+                solve.set_wgpu(render_state, 24, 8, render_state.msaa_samples);
+                solidcraft_ui_egui::gpu::install_picture_renderer(render_state);
+            } else {
+                log::error!("SolidCraft Android started without a wgpu render state; the 3D viewport will not render");
+            }
             if let Some(prefs) = creation.storage.and_then(|store| store.get_string(solidcraft_ui_egui::prefs::STORAGE_KEY)) {
                 solve.load_prefs(&prefs);
             }

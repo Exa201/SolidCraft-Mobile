@@ -37,7 +37,7 @@ Camera navigation lives in `crates/ui-egui/src/navigation.rs`. The shared event 
 
 Host integration tests exercise egui touch events through camera navigation and viewport selection. The complete egui crate suite has passed on the current working tree before the final full-workspace CI run. Small-target accuracy and gesture arbitration have not yet been verified on an Android device. Physical keyboard, mouse and stylus behavior also need device-level coverage.
 
-The Rust UI is rendered through eframe/wgpu on GameActivity. Android lifecycle callbacks and eframe persistence are wired, and the app has launched on an API 36 emulator and a physical Android 16 device. Pause/resume, rotation, surface recreation, GPU context loss, forced-crash recovery, and memory-pressure behavior are not yet fully tested on Android.
+The Rust UI is rendered through eframe/wgpu on GameActivity. Android startup passes eframe's wgpu render state to `SolveApp::set_wgpu` and installs the shared picture renderer; omitting this setup left the viewport blank even though CAD commands completed. The API 36 emulator now verifies visible shaded geometry after creating a box. Android lifecycle callbacks and eframe persistence are wired, and the app has launched on an API 36 emulator and a physical Android 16 device. Pause/resume, rotation, surface recreation, GPU context loss, forced-crash recovery, and memory-pressure behavior are not yet fully tested on Android.
 
 ## Responsive presentation
 
@@ -50,7 +50,7 @@ The existing Rust UI switches the command ribbon to compact icon presentation be
 - The API 36 emulator has verified SAF open, Save As, reopen after process restart, and asynchronous DXF export through Downloads.
 - Rust host tests cover navigation, touch ownership and expanded selection hit slop. They do not prove physical-device touch precision.
 - A full `cargo xtask ci` run for the exact working tree is in progress; `TEST_REPORT.md` records completed subtests and must be updated with its final result.
-- The current debug APK has been built and inspected but the latest APK has not yet been installed and re-tested on a device. Production signing is not configured.
+- The latest debug APK including wgpu initialization has been installed and verified with an interactive box-creation flow on the API 36 emulator. Physical-device rendering and production signing remain unverified.
 
 ## Android UI strategy and remaining work
 
