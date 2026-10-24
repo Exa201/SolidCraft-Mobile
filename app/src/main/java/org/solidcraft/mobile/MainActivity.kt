@@ -134,7 +134,11 @@ class MainActivity : GameActivity() {
                 }
                 activeRequest = pending
             }
-            Toast.makeText(this, "Select the folder containing the glTF buffer files", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Select the folder containing the glTF buffer files. Android may require a project subfolder instead of the Downloads root.",
+                Toast.LENGTH_LONG,
+            ).show()
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             try {
