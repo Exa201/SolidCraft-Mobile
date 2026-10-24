@@ -25,6 +25,16 @@ class DocumentWriteBackTest {
     }
 
     @Test
+    fun providerShortReadsDoNotCauseAFalseSaveVerificationFailure() = withFiles { staged, backup ->
+        val provider = MemoryDocument("old document".toByteArray(), readChunkSize = 3)
+
+        assertTrue(DocumentWriteBack.persist(staged, backup, provider).isEmpty())
+
+        assertArrayEquals(staged.readBytes(), provider.bytes)
+        assertFalse(backup.exists())
+    }
+
+    @Test
     fun failedPartialWriteRestoresOriginalDocument() = withFiles { staged, backup ->
         val provider = MemoryDocument("important original data".toByteArray(), failWriteNumbers = setOf(1), failFirstWriteAfterBytes = 5)
 
@@ -133,13 +143,17 @@ class DocumentWriteBackTest {
         private val failWriteNumbers: Set<Int> = emptySet(),
         private val failFirstWriteAfterBytes: Int? = null,
         private val corruptFirstWrite: Boolean = false,
+        private val readChunkSize: Int = Int.MAX_VALUE,
     ) : DocumentStreams {
         var bytes = initial
             private set
         var writeCount = 0
             private set
 
-        override fun openRead(): InputStream? = if (readable) ByteArrayInputStream(bytes) else null
+        override fun openRead(): InputStream? = if (readable) object : ByteArrayInputStream(bytes) {
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                super.read(buffer, offset, minOf(length, readChunkSize))
+        } else null
 
         override fun openWrite(): OutputStream {
             val writeNumber = ++writeCount

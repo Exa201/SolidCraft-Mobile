@@ -151,12 +151,29 @@ internal object DocumentWriteBack {
         val firstBuffer = ByteArray(BUFFER_SIZE)
         val secondBuffer = ByteArray(BUFFER_SIZE)
         while (true) {
-            val firstCount = first.read(firstBuffer)
-            val secondCount = second.read(secondBuffer)
+            val firstCount = readChunk(first, firstBuffer)
+            val secondCount = readChunk(second, secondBuffer)
             if (firstCount != secondCount) return false
             if (firstCount < 0) return true
             for (index in 0 until firstCount) if (firstBuffer[index] != secondBuffer[index]) return false
         }
+    }
+
+    /** Fill each comparison block because providers may return fewer bytes than local files. */
+    private fun readChunk(input: InputStream, buffer: ByteArray): Int {
+        var offset = 0
+        while (offset < buffer.size) {
+            val count = input.read(buffer, offset, buffer.size - offset)
+            if (count < 0) break
+            if (count == 0) {
+                val value = input.read()
+                if (value < 0) break
+                buffer[offset++] = value.toByte()
+            } else {
+                offset += count
+            }
+        }
+        return if (offset == 0) -1 else offset
     }
 
     private fun sha256(source: InputStream): String = source.use { input ->
