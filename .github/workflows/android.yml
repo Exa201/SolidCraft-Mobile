@@ -5,8 +5,13 @@ on:
   pull_request:
     paths:
       - "ANDROID.md"
+      - "ARCHITECTURE.md"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "FEATURE_PARITY.md"
+      - "README.md"
+      - "RELEASE_NOTES.md"
+      - "TEST_REPORT.md"
       - "app/**"
       - "apps/solidcraft-android/**"
       - "build.gradle.kts"
@@ -19,8 +24,13 @@ on:
     branches: [main]
     paths:
       - "ANDROID.md"
+      - "ARCHITECTURE.md"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "FEATURE_PARITY.md"
+      - "README.md"
+      - "RELEASE_NOTES.md"
+      - "TEST_REPORT.md"
       - "app/**"
       - "apps/solidcraft-android/**"
       - "build.gradle.kts"
