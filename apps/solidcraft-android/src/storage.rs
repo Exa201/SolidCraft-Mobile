@@ -21,6 +21,16 @@ struct Picker {
     requested: bool,
 }
 
+impl Drop for Picker {
+    fn drop(&mut self) {
+        if self.requested {
+            if let Err(error) = cancel_document_request(self.id) {
+                log::warn!("Could not cancel Android document picker request: {error}");
+            }
+        }
+    }
+}
+
 impl Future for Picker {
     type Output = Option<String>;
 
@@ -94,6 +104,14 @@ fn take_document_result(id: i64) -> Result<Option<String>, String> {
         }
         let value = JString::cast_local(env, result)?;
         Ok(Some(value.try_to_string(env)?))
+    })
+}
+
+fn cancel_document_request(id: i64) -> Result<(), String> {
+    with_jni(|env| {
+        let class = activity_class(env)?;
+        env.call_static_method(class, jni_str!("cancelDocumentRequest"), jni_sig!("(J)V"), &[JValue::Long(id)])?;
+        Ok(())
     })
 }
 

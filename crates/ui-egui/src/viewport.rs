@@ -2573,16 +2573,27 @@ pub fn show(app: &mut SolveApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let rect = ui.max_rect();
     let previous_touch_ids = &app.viewport.touch_pick_ids;
-    let (touch_pick_ids, released_viewport_touch) = ui.input(|input| {
+    let (touch_pick_ids, released_viewport_touch, released_touch_pos) = ui.input(|input| {
         let mut active = previous_touch_ids.clone();
         let mut released_viewport_touch = false;
+        let mut released_touch_pos = None;
         for event in &input.events {
             let egui::Event::Touch { device_id, id, phase, pos, .. } = event else { continue };
             let touch = (*device_id, *id);
             match phase {
-                egui::TouchPhase::Start if rect.contains(*pos) && !active.contains(&touch) => active.push(touch),
-                egui::TouchPhase::Move if rect.contains(*pos) && !active.contains(&touch) => active.push(touch),
-                egui::TouchPhase::End | egui::TouchPhase::Cancel => {
+                egui::TouchPhase::Start if rect.contains(*pos) && !crate::shell::covered(app, *pos) && !active.contains(&touch) => active.push(touch),
+                egui::TouchPhase::Move if rect.contains(*pos) && !crate::shell::covered(app, *pos) && !active.contains(&touch) => active.push(touch),
+                egui::TouchPhase::End => {
+                    if let Some(index) = active.iter().position(|candidate| *candidate == touch) {
+                        let last_touch = active.len() == 1;
+                        active.remove(index);
+                        released_viewport_touch = true;
+                        if last_touch && rect.contains(*pos) && !crate::shell::covered(app, *pos) {
+                            released_touch_pos = Some(*pos);
+                        }
+                    }
+                }
+                egui::TouchPhase::Cancel => {
                     if let Some(index) = active.iter().position(|candidate| *candidate == touch) {
                         active.remove(index);
                         released_viewport_touch = true;
@@ -2594,8 +2605,9 @@ pub fn show(app: &mut SolveApp, ui: &mut egui::Ui) {
         if !input.focused {
             active.clear();
             released_viewport_touch = false;
+            released_touch_pos = None;
         }
-        (active, released_viewport_touch)
+        (active, released_viewport_touch, released_touch_pos)
     });
     app.viewport.touch_pick = !touch_pick_ids.is_empty() || released_viewport_touch;
     app.viewport.touch_pick_ids = touch_pick_ids;
@@ -2606,10 +2618,11 @@ pub fn show(app: &mut SolveApp, ui: &mut egui::Ui) {
     if !flat {
         app.flat_view.fitted = false;
     }
+    let touch_was_navigation = app.viewport.touch_navigation_active;
     let input =
         if flat { crate::dialogs_sheet::navigate(app, ui, rect, &resp) } else { crate::navigation::handle(app, ui, rect, &resp, NavCaps::MODEL) };
     let CameraInput {
-        hover,
+        mut hover,
         scroll,
         mods,
         middle,
@@ -2617,13 +2630,22 @@ pub fn show(app: &mut SolveApp, ui: &mut egui::Ui) {
         primary_down,
         primary_pressed,
         delta,
-        inside,
+        mut inside,
         axes,
         pinch,
         pan,
         primary_nav,
         mode,
     } = input;
+    // egui-winit emulates a mouse click for Android touches, then emits PointerGone on release.
+    // Buttons retain their pressed widget, but viewport picking resolves its geometry from
+    // `hover` later in the frame. Restore the last single-finger release position for that pick.
+    // A completed multi-touch navigation gesture must never be mistaken for a selection.
+    if !touch_was_navigation && let Some(pos) = released_touch_pos.filter(|pos| !axes.contains(*pos) && !crate::shell::covered(app, *pos)) {
+        hover = Some(pos);
+        inside = true;
+        app.viewport.mouse = Some(pos);
+    }
     app.viewport.physical_scale = ui.ctx().pixels_per_point();
     // Suppress-snap chord and manipulator-free prefs; Shift midpoint targeting while sketching.
     // Preview reselect uses Primary but is skipped while a manipulator drag is under way.
@@ -4215,6 +4237,104 @@ fn view_menu(app: &mut SolveApp, ui: &mut egui::Ui, button: Rect) -> bool {
 mod tests {
     use super::*;
     use crate::navigation::*;
+
+    #[test]
+    fn android_touch_release_picks_the_origin_plane_after_pointer_gone() {
+        let mut h = crate::scenario::Harness::new();
+        h.app.start("sketch.create");
+        h.frames(3);
+        let rect = h.app.viewport.rect.expect("the sketch viewport is laid out");
+        let proj = projection(&h.app, rect);
+        let pos = ["XY", "XZ", "YZ"]
+            .into_iter()
+            .filter_map(|name| origin_plane_target(&h.app, &proj, name).and_then(|world| proj.to_screen(world)))
+            .find(|pos| !crate::shell::covered(&h.app, *pos) && !axis_rect(&h.app, rect).contains(*pos))
+            .expect("one origin plane target is unobscured by the sketch dialog");
+        let device = egui::TouchDeviceId(1);
+        let id = egui::TouchId(1);
+        let button = |pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+        let frame = |h: &mut crate::scenario::Harness, events| {
+            let raw = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0))),
+                time: Some(h.ctx.input(|input| input.time) + 1.0 / 60.0),
+                focused: true,
+                events,
+                ..Default::default()
+            };
+            let app = &mut h.app;
+            let mut output = h.ctx.run_ui(raw, |ui| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            });
+            output.textures_delta.clear();
+        };
+        frame(&mut h, vec![egui::Event::Touch { device_id: device, id, phase: egui::TouchPhase::Start, pos, force: None }, button(true)]);
+        frame(
+            &mut h,
+            vec![
+                egui::Event::Touch { device_id: device, id, phase: egui::TouchPhase::End, pos, force: None },
+                button(false),
+                egui::Event::PointerGone,
+            ],
+        );
+        assert!(h.app.session.active_sketch.is_some(), "the Android touch release should pick the plane and enter sketch mode");
+    }
+
+    #[test]
+    fn android_touch_taps_place_both_ends_of_a_sketch_line() {
+        let mut h = crate::scenario::Harness::new();
+        h.app.run("sketch.create", json!({"plane":"XY"})).unwrap();
+        h.call("ui.view", json!({"view":"top"}));
+        h.frames(3);
+        let rect = h.app.viewport.rect.expect("the sketch viewport is laid out");
+        let proj = projection(&h.app, rect);
+        let point = |x: f64| proj.to_screen(Vec3::new(x, 0.0, 0.0)).expect("the chosen sketch point is in front of the camera");
+        let (start, end) = (point(10.0), point(30.0));
+        for pos in [start, end] {
+            assert!(rect.contains(pos) && !crate::shell::covered(&h.app, pos) && !axis_rect(&h.app, rect).contains(pos));
+        }
+        let device = egui::TouchDeviceId(2);
+        let mut next_id = 0;
+        let mut tap = |h: &mut crate::scenario::Harness, pos| {
+            next_id += 1;
+            let id = egui::TouchId(next_id);
+            let button =
+                |pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+            let frame = |h: &mut crate::scenario::Harness, events| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0))),
+                    time: Some(h.ctx.input(|input| input.time) + 1.0 / 60.0),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                };
+                let app = &mut h.app;
+                let mut output = h.ctx.run_ui(raw, |ui| {
+                    app.logic(ui.ctx());
+                    app.ui(ui);
+                });
+                output.textures_delta.clear();
+            };
+            frame(h, vec![egui::Event::Touch { device_id: device, id, phase: egui::TouchPhase::Start, pos, force: None }, button(true)]);
+            frame(
+                h,
+                vec![
+                    egui::Event::Touch { device_id: device, id, phase: egui::TouchPhase::End, pos, force: None },
+                    button(false),
+                    egui::Event::PointerGone,
+                ],
+            );
+        };
+
+        h.app.start("sketch.line");
+        tap(&mut h, start);
+        assert_eq!(h.app.tool.as_ref().map(|tool| tool.pts.len()), Some(1), "first tap should place the line start");
+        tap(&mut h, end);
+        let sketch = h.app.session.active_sketch.expect("the sketch remains active");
+        let world = crate::open_meshing::shown_world(&h.app);
+        let model = world.sketch(sketch).expect("the active sketch is in the evaluated document");
+        assert_eq!(model.sketch.curves.len(), 1, "second touch tap should commit one line segment");
+    }
 
     /// Every tangent seam Continuity Analysis reports keeps its colour while the pointer rests on
     /// a face (#1247): a 60 x 40 x 20 box with its four top edges rounded (6 mm) has eight, four

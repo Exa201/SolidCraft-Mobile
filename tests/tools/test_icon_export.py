@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import unittest
 import urllib.error
 import urllib.request
@@ -99,7 +100,8 @@ class IconExportTest(unittest.TestCase):
                         try:
                             with urllib.request.urlopen(url + endpoint if data is None else
                                                        urllib.request.Request(url + endpoint, data=data), timeout=3) as response:
-                                return json.load(response)
+                                body = response.read()
+                                return json.loads(body) if endpoint.startswith('/api/') else body.decode()
                         except urllib.error.HTTPError:
                             raise
                         except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
@@ -119,15 +121,19 @@ class IconExportTest(unittest.TestCase):
 
                 def post(endpoint, state):
                     data = json.dumps({'base': base, **state}).encode()
-                    return http_request(endpoint, data, retry_safe=endpoint != '/api/export')
+                    return http_request(endpoint, data, retry_safe=True)
 
                 state = {'final': base['final'], 'notes': base['notes']}
+                state['request_id'] = uuid.uuid4().hex
                 inbox = root / 'target/codex-icon-review/inbox'
                 post('/api/review', state)
                 self.assertFalse(inbox.exists(), 'autosave must not request redraws')
                 result = post('/api/export', state)
                 self.assertTrue(result['ok'])
                 self.assertEqual(result['sent'], 1)
+                retry = post('/api/export', state)
+                self.assertEqual(retry['request_id'], result['request_id'])
+                self.assertEqual(retry['sent'], 1)
                 requests = list(inbox.glob('*.json'))
                 self.assertEqual(len(requests), 1)
                 request = json.loads(requests[0].read_text(encoding='utf-8'))
@@ -135,8 +141,7 @@ class IconExportTest(unittest.TestCase):
                 self.assertEqual(request['notes'], {'joint': original['notes']['joint']})
                 self.assertFalse(list(inbox.glob('*.tmp')))
                 self.assertFalse((root / 'target/review-requests.log').exists())
-                with urllib.request.urlopen(url, timeout=2) as response:
-                    page = response.read().decode()
+                page = http_request('/')
                 self.assertIn('local review inbox', page)
                 self.assertNotIn('Claude', page)
                 self.assertIn('location.reload()', page)

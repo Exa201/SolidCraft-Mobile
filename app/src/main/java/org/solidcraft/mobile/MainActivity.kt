@@ -224,6 +224,9 @@ class MainActivity : GameActivity() {
             val request = DocumentRequest(id, save, name, extensions)
             activity.runOnUiThread {
                 synchronized(requestLock) {
+                    // The Rust picker future may have been dropped while this UI-thread task was
+                    // queued. Do not launch a picker for a request that no longer has a consumer.
+                    if (id !in requested) return@runOnUiThread
                     if (activeRequest != null) {
                         requested.remove(id)
                         results[id] = ""
@@ -262,6 +265,16 @@ class MainActivity : GameActivity() {
             val value = results.remove(id) ?: return null
             requested.remove(id)
             return value
+        }
+
+        /** Called when the Rust picker future is dropped before Android returns a result. */
+        @JvmStatic
+        fun cancelDocumentRequest(id: Long) {
+            requested.remove(id)
+            results.remove(id)
+            synchronized(requestLock) {
+                if (activeRequest?.id == id) activeRequest = null
+            }
         }
 
         /** Copies a staged CAD save back to its persisted document-provider URI. Empty means success. */

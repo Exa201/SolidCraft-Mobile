@@ -311,15 +311,31 @@ if '--serve' in args:
                     res['sent'] = len(todo)
                     if todo:
                         os.makedirs(REQUESTS, exist_ok=True)
-                        request_id = uuid.uuid4().hex
+                        supplied_id = inc.get('request_id')
+                        if supplied_id is None:
+                            request_id = uuid.uuid4().hex
+                        else:
+                            try:
+                                request_id = uuid.UUID(supplied_id).hex
+                            except (AttributeError, TypeError, ValueError) as e:
+                                raise ValueError('invalid export request id') from e
                         path = os.path.join(REQUESTS, request_id + '.json')
-                        # Publish a complete snapshot atomically so the chat never reads half a request.
-                        with open(path + '.tmp', 'w', encoding='utf-8') as f:
-                            json.dump({'version': 1, 'id': request_id,
-                                       'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                       'notes': {i: r['notes'][i] for i in todo}}, f, indent=1)
-                            f.write('\n')
-                        os.replace(path + '.tmp', path)
+                        snapshot = {i: r['notes'][i] for i in todo}
+                        if os.path.exists(path):
+                            # A client may retry after losing the response. The stable request id
+                            # makes that safe without exporting a duplicate inbox item.
+                            with open(path, encoding='utf-8') as f:
+                                existing = json.load(f)
+                            if existing.get('notes') != snapshot:
+                                raise ValueError('export request id was already used for another snapshot')
+                        else:
+                            # Publish a complete snapshot atomically so the chat never reads half a request.
+                            with open(path + '.tmp', 'w', encoding='utf-8') as f:
+                                json.dump({'version': 1, 'id': request_id,
+                                           'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                           'notes': snapshot}, f, indent=1)
+                                f.write('\n')
+                            os.replace(path + '.tmp', path)
                         res['request_id'] = request_id
                 self._send(200, json.dumps(res), 'application/json')
             except Exception as e:
