@@ -7,7 +7,7 @@ SolidCraft Mobile currently starts the shared SolidCraft Rust engine and CAD int
 ### Present
 
 - Rust geometry/feature engine and egui CAD interface are reused from SolidCraft.
-- Android GameActivity host with arm64-v8a native library.
+- Android GameActivity host with separate arm64-v8a and x86_64 APKs.
 - Compile/target SDK 37, minimum API 28.
 - Android Storage Access Framework bridge for open/create-document requests, private staging, and URI writeback is implemented. Downloads provider open, Save As, reopen after process restart, and asynchronous DXF export passed on an API 36 emulator.
 - SAF writeback now fsyncs a local rollback copy and a hash marker before touching the provider; later saves can distinguish an already verified write from an interrupted one. The current APK passed a Downloads Save As → edit a box → save → force-stop/relaunch → Open Recent round trip on a clean API 36 AVD. JVM regression tests also cover stale backup cleanup and unreadable-provider recovery; simulated provider-failure rollback has not yet been verified on device.

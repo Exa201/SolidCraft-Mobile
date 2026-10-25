@@ -16,6 +16,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
     sourceSets.getByName("main").jniLibs.directories.add("src/main/jniLibs")
 }
 
@@ -32,7 +41,13 @@ dependencies {
 
 val buildRustAndroid = tasks.register<Exec>("buildRustAndroid") {
     workingDir = rootProject.projectDir
-    commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", "app/src/main/jniLibs", "build", "-p", "solidcraft-android", "--profile", "android")
+    commandLine(
+        "cargo", "ndk",
+        "-t", "arm64-v8a",
+        "-t", "x86_64",
+        "-o", "app/src/main/jniLibs",
+        "build", "-p", "solidcraft-android", "--profile", "android",
+    )
     inputs.files(
         rootProject.file("Cargo.toml"),
         rootProject.file("Cargo.lock"),
@@ -41,6 +56,7 @@ val buildRustAndroid = tasks.register<Exec>("buildRustAndroid") {
         rootProject.fileTree("vendor"),
     )
     outputs.dir("src/main/jniLibs/arm64-v8a")
+    outputs.dir("src/main/jniLibs/x86_64")
 }
 
 tasks.named("preBuild").configure {

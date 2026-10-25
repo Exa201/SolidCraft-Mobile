@@ -63,7 +63,7 @@ jobs:
       - name: Install Android SDK components
         run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"
       - name: Install Rust Android target
-        run: rustup target add aarch64-linux-android
+        run: rustup target add aarch64-linux-android x86_64-linux-android
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
       - name: Test Android host code and build APK
@@ -71,7 +71,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: solidcraft-mobile-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: solidcraft-mobile-debug-apks
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
