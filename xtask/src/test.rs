@@ -117,8 +117,13 @@ fn finish(mut c: Command, label: &str) -> Result<String, String> {
 /// `cargo test --workspace --profile ci --no-run`, and the executables it built.
 fn build(cargo_args: &[&str]) -> Result<Vec<TestBin>, String> {
     let mut c = cargo();
-    c.args(["test", "--workspace", "--profile", "ci", "--no-run", "--message-format=json-render-diagnostics"]).args(cargo_args);
-    eprintln!("$ cargo test --workspace --profile ci --no-run");
+    c.args(["test", "--profile", "ci", "--no-run", "--message-format=json-render-diagnostics"]);
+    if !has_package_selector(cargo_args) {
+        c.arg("--workspace");
+    }
+    c.args(cargo_args);
+    let scope = if has_package_selector(cargo_args) { format!("package-filtered {cargo_args:?}") } else { "workspace".into() };
+    eprintln!("$ cargo test ({scope}) --profile ci --no-run");
     let out = c.stderr(Stdio::inherit()).output().map_err(|e| format!("cargo test --no-run: failed to spawn: {e}"))?;
     if !out.status.success() {
         return Err(format!("cargo test --no-run: exited with {}", out.status));
@@ -154,13 +159,22 @@ pub fn doc_tests(cargo_args: &[&str], test_args: &[&str]) -> (String, Command) {
 
 /// Run doc tests only when no package/target selectors would conflict with `--doc`.
 pub fn doc_tests_if_unfiltered(cargo_args: &[&str], test_args: &[&str]) -> Vec<(String, Command)> {
-    let selectors = ["-p", "--package", "--workspace", "--all", "--lib", "--bin", "--test", "--example", "--bench"];
-    if cargo_args.iter().any(|arg| selectors.contains(arg)) { Vec::new() } else { vec![doc_tests(cargo_args, test_args)] }
+    if has_package_selector(cargo_args) || has_target_selector(cargo_args) { Vec::new() } else { vec![doc_tests(cargo_args, test_args)] }
+}
+
+fn has_package_selector(cargo_args: &[&str]) -> bool {
+    let selectors = ["-p", "--package"];
+    cargo_args.iter().any(|arg| selectors.contains(arg) || arg.starts_with("--package="))
+}
+
+fn has_target_selector(cargo_args: &[&str]) -> bool {
+    let selectors = ["--workspace", "--all", "--lib", "--bin", "--test", "--example", "--bench", "--all-targets"];
+    cargo_args.iter().any(|arg| selectors.contains(arg))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{doc_tests_if_unfiltered, env_limit_from};
+    use super::{doc_tests_if_unfiltered, env_limit_from, has_package_selector, has_target_selector};
 
     #[test]
     fn test_limit_uses_positive_environment_values_and_defaults_otherwise() {
@@ -174,5 +188,13 @@ mod tests {
     fn package_filtered_tests_do_not_schedule_conflicting_workspace_doc_tests() {
         assert!(doc_tests_if_unfiltered(&["-p", "solidcraft-kernel"], &[]).is_empty());
         assert_eq!(doc_tests_if_unfiltered(&[], &[]).len(), 1);
+    }
+
+    #[test]
+    fn package_and_target_selectors_are_detected_separately() {
+        assert!(has_package_selector(&["-p", "solidcraft-kernel"]));
+        assert!(has_package_selector(&["--package=solidcraft-kernel"]));
+        assert!(has_target_selector(&["--lib"]));
+        assert!(!has_package_selector(&["--features", "default"]));
     }
 }
