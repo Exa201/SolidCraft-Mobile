@@ -156,7 +156,18 @@ Ran `:app:testDebugUnitTest` locally with Android SDK 37 configured. The cached 
 
 Added `x86_64-linux-android` to the Gradle native build and Android workflow alongside `aarch64-linux-android`, and enabled ABI splits so devices install only their architecture's CAD engine. `:app:testDebugUnitTest :app:assembleDebug --no-daemon` completed successfully after fresh optimized Rust cross-builds for both ABIs. The unit-test task was `UP-TO-DATE` on this build; the latest explicitly rerun Kotlin unit-test suites remain 34 passed, 0 failed, 0 errors (see the preceding continuation section). Packaging produced `app-arm64-v8a-debug.apk` (93,017,730 bytes) and `app-x86_64-debug.apk` (109,681,263 bytes). `aapt dump badging` reports only `arm64-v8a` in the first and only `x86_64` in the second; `apksigner verify --verbose` confirms a valid v2 debug signature and one signer for each.
 
-Attempted native x86_64 startup on API-36 AVD `emulator-5556`. Android reported `primaryCpuAbi=x86_64` and loaded `lib/x86_64/libsolidcraft_android.so`, but the app stayed black and `MainActivity` timed out on its focus event. wgpu enumerated the emulator's host Vulkan adapter and GL adapter after the timeout. A diagnostic x86_64 build restricted to GL also failed to restore a responsive screen; the emulator's Android system server later hit its `DisplayManagerService.onBootPhase` watchdog and did not complete reboot. The GL-only override was removed. No x86_64 device or SAF action is counted as passed. The APK split/build changes have not yet received their new GitHub workflow results.
+Attempted native x86_64 startup on API-36 AVD `emulator-5556`. Android reported `primaryCpuAbi=x86_64` and loaded `lib/x86_64/libsolidcraft_android.so`, but the app stayed black and `MainActivity` timed out on its focus event. wgpu enumerated the emulator's host Vulkan adapter and GL adapter after the timeout. A diagnostic x86_64 build restricted to GL also failed to restore a responsive screen; the emulator's Android system server later hit its `DisplayManagerService.onBootPhase` watchdog and did not complete reboot. The GL-only override was removed. No x86_64 device or SAF action is counted as passed. At the time of this device attempt, CI had not completed; final workflow results are documented below.
+
+### GitHub dual-ABI APK workflow verification (2026-10-26, commit `2b2949637c247b692b040590aa752cf6eb4e0819`)
+
+The PR's Android APK workflow [40244496611](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40244496611) completed successfully, including fresh Android host tests, native builds, and upload of the `solidcraft-mobile-debug-apks` artifact. Downloaded both APKs from that exact run and checked their package metadata and signatures:
+
+| Artifact | Size | SHA-256 | Packaged ABI | Signature |
+| --- | ---: | --- | --- | --- |
+| `app-arm64-v8a-debug.apk` | 93,110,378 bytes | `915BB36CCFB5EDE8572B55165CDC73AE0743590E0D05ADD6643BC4D3A2503107` | `arm64-v8a` only | APK Signature Scheme v2 verified, one signer |
+| `app-x86_64-debug.apk` | 109,768,247 bytes | `9A676D1B4FE3D77C85181B2B158F6723EBADE61DF1B22BE17325260CED0145E2` | `x86_64` only | APK Signature Scheme v2 verified, one signer |
+
+Packaging lint workflow [40244496553](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40244496553) also passed. The general CI workflow [40244496544](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40244496544) remains pending without any jobs started. The PR has no `approved-for-ci` label; the repository workflow describes that label as a maintainer review gate for heavy checks. No approval label or review gate was bypassed. These CI artifact checks verify packaging only; they do not resolve the x86_64 emulator startup failure or verify the exact uploaded APKs on a supported native ARM64 device.
 
 ### API-36 Android touch continuation (2026-10-25, installed APK)
 
