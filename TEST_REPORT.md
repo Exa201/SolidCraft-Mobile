@@ -169,6 +169,17 @@ The PR's Android APK workflow [40244496611](https://github.com/Exa201/SolidCraft
 
 Packaging lint workflow [40244496553](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40244496553) also passed. The general CI workflow [40244496544](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40244496544) remains pending without any jobs started. The PR has no `approved-for-ci` label; the repository workflow describes that label as a maintainer review gate for heavy checks. No approval label or review gate was bypassed. These CI artifact checks verify packaging only; they do not resolve the x86_64 emulator startup failure or verify the exact uploaded APKs on a supported native ARM64 device.
 
+### Android artifact rebuilt from documentation-updated PR head (2026-10-26, commit `d79ae7e6fb0db26c00382e1136ce8da4946e7fdc`)
+
+The Android APK workflow [40246576683](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40246576683) and packaging lint workflow [40246576679](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40246576679) both passed. Downloaded that run's `solidcraft-mobile-debug-apks` artifact and rechecked package ID, ABI metadata, and APK Signature Scheme v2:
+
+| Artifact | Size | SHA-256 | Packaged ABI | Signature |
+| --- | ---: | --- | --- | --- |
+| `app-arm64-v8a-debug.apk` | 93,110,378 bytes | `306FF654FF778A3EEFD9FE52BD0BC936EE8AF02060BBEE45F42CB01E28CB9556` | `arm64-v8a` only | v2 verified, one signer |
+| `app-x86_64-debug.apk` | 109,768,247 bytes | `49B8B5CBAE32E89FB64BF513C8384BE7C529ACDDA46EBF297F637EE6FDB439C8` | `x86_64` only | v2 verified, one signer |
+
+The general CI run [40246576699](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40246576699) is still pending with no jobs started. The APKs are debug-signed and were package-checked, not installed on a device; emulator and signing limitations above remain.
+
 ### API-36 Android touch continuation (2026-10-25, installed APK)
 
 On `emulator-5556` (Android 16 / API 36, x86_64 guest using the installed arm64 APK), tapped Sketch, selected the visible origin plane, entered `Sketch1`, selected Create → Line, placed two endpoints with separate one-finger taps, and finished the sketch. A horizontal segment was visible in the model viewport after returning to Model. This directly verifies that single-finger tool selection, plane picking, line creation and sketch completion work on this emulator. File → Save As then launched DocumentsUI in `Download/solidcraft-gltf-e2e` with `Untitled.solidcraft` prefilled, but the picker displayed “Files isn't responding”; `dumpsys activity lastanr` reports a 5,010 ms focus-event timeout for `com.android.documentsui`. Selecting Wait did not recover it after 12 seconds. No provider save was confirmed, and the emulator app/picker were left open; treat this as a failed SAF save attempt, not a round trip. A second connected emulator was found running an OrkanSlicer test app and was left untouched.
