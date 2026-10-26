@@ -197,3 +197,14 @@ On `emulator-5556` (Android 16 / API 36, x86_64 guest using the installed arm64 
 ### Current-worktree CI retry (2026-10-25)
 
 Added optional `SOLIDCRAFT_TEST_WORKERS` and `SOLIDCRAFT_TEST_THREADS` limits to `cargo xtask test` so constrained hosts can schedule Rust test binaries more conservatively; defaults retain the existing two-process/two-thread behavior. Added `SOLIDCRAFT_TEST_NOCAPTURE` for line-by-line output from long tests. Package-scoped test requests now build only the requested package, and package/target-filtered runs omit conflicting workspace doc tests. Five xtask tests passed (5/5), formatting and xtask Clippy passed. A fresh serial `cargo xtask ci` passed formatting, assets (458), icon checks (17 tests), licenses, sorted lists, dependency layering (18 crates), UI container checks, Clippy (`-D warnings`), and the WASM check (12 crates); CLI tests (45/45), doc tests, and several kernel integration targets passed. That full run was manually interrupted during the 899-test `solidcraft_kernel` library suite because the runner buffered all output until the binary exited. A direct run of that same test binary with `--nocapture --test-threads=1` visibly passed the initial blend, body, boolean, and curveblend cases, then was stopped on a single expensive rolling-ball corner case after sustained CPU use; no failure was observed, but the suite did not complete. The previously transient MCP test passed through the package-scoped xtask path in one compiled binary (1/1), both with and without live output enabled. Full current-worktree Rust-suite and `cargo xtask ci` status remains unverified.
+
+### Documentation-only PR head verification (commit `636bc453`, 2026-10-26)
+
+The Android APK workflow [40255403459](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40255403459) completed successfully in 21m1s. Its Android host tests, native builds, ABI/signature verification, and APK artifact upload all passed. Packaging lint workflow [40255403480](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40255403480) also passed. Downloaded the artifacts from the exact successful run and independently verified package metadata, ABI contents, v2 signatures, signer count, size, and SHA-256:
+
+| Artifact | Size | SHA-256 | Packaged ABI | Signature |
+| --- | ---: | --- | --- | --- |
+| `app-arm64-v8a-debug.apk` | 93,110,378 bytes | `1A9AE514A0E11A6C6867F89268FB73A19D11C4E8FE61FEEEAC8867DE67507726` | `arm64-v8a` only | v2 verified, one signer |
+| `app-x86_64-debug.apk` | 109,768,247 bytes | `09D8B9AA077F5A9FE746DE77F9FB53040C5F61137EA71C904ECAAD3F85F0156B` | `x86_64` only | v2 verified, one signer |
+
+Both APKs report package `org.solidcraft.mobile` and version `0.1.0`. They are debug-signed CI artifacts; this run does not verify a production-signed release or runtime behavior on a healthy Android device. The PR's general CI remains subject to the repository's `approved-for-ci` review gate.
