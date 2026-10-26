@@ -27,7 +27,7 @@ Shared wgpu rendering
 
 The engine accepts filesystem paths, so SAF documents are copied into durable app-private storage. Open selections are staged before the Rust file command receives the path. Save selections retain a URI-to-staged-path mapping; Rust saves to the staged file and the Kotlin bridge writes the completed file back through `ContentResolver`. Persistable grants are retained when the provider supports them. No broad storage permission is requested. The staged workspace is not the user-visible source of truth: provider write failures are returned to the save workflow.
 
-For glTF documents with external relative buffers, Kotlin parses the glTF JSON or GLB v2 JSON chunk, rejects unsafe paths, and asks the user to select the buffer folder. Only referenced files are copied into the staged document directory, with traversal and size limits. GLB integer fields are little-endian. File-picker cancellation resolves as no selection.
+For glTF documents with external relative buffers, Kotlin parses the glTF JSON or GLB v2 JSON chunk, rejects unsafe paths, and asks the user to select the buffer folder. Only referenced files are copied into the staged document directory, with traversal and size limits. GLB integer fields are little-endian. File-picker results and cancellation are serialized in a small request registry; an active picker keeps its request-code association until Android returns, so a late result cannot be mistaken for a newer request.
 
 External glTF buffers use the same fsync-and-atomic-replace staging path as opened CAD documents. A provider read failure or a buffer that exceeds the remaining 1 GiB import budget therefore leaves any previous staged buffer intact; no partially copied buffer is exposed to the Rust importer.
 

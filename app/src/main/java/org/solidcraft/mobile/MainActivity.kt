@@ -14,9 +14,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
 import com.google.androidgamesdk.GameActivity
 import java.io.File
-import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
 import java.lang.ref.WeakReference
+import java.security.MessageDigest
 import org.json.JSONObject
 
 /** Android lifecycle, text-input host, and Storage Access Framework bridge. */
@@ -59,8 +58,10 @@ class MainActivity : GameActivity() {
             current
         } ?: return
 
+        if (!documentResults.isPending(request.id)) return
+
         if (resultCode != Activity.RESULT_OK || data?.data == null) {
-            results[request.id] = ""
+            documentResults.complete(request.id, "")
             return
         }
 
@@ -74,6 +75,7 @@ class MainActivity : GameActivity() {
 
     private fun finishDocumentSelection(request: DocumentRequest, uri: Uri, grantedFlags: Int) {
         try {
+            if (!documentResults.isPending(request.id)) return
             val allowed = grantedFlags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             if (allowed != 0) {
                 try {
@@ -117,19 +119,21 @@ class MainActivity : GameActivity() {
                 requestResourceFolder(request, staged, resources)
                 return
             }
-            results[request.id] = staged.absolutePath
+            documentResults.complete(request.id, staged.absolutePath)
         } catch (error: Exception) {
-            runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Document access failed"}", Toast.LENGTH_LONG).show() }
-            results[request.id] = ""
+            if (documentResults.complete(request.id, "")) {
+                runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Document access failed"}", Toast.LENGTH_LONG).show() }
+            }
         }
     }
 
     private fun requestResourceFolder(request: DocumentRequest, staged: File, paths: List<String>) {
         runOnUiThread {
+            if (!documentResults.isPending(request.id)) return@runOnUiThread
             val pending = request.copy(stagedPath = staged.absolutePath, resourcePaths = paths)
             synchronized(requestLock) {
                 if (activeRequest != null) {
-                    results[request.id] = ""
+                    documentResults.complete(request.id, "")
                     return@runOnUiThread
                 }
                 activeRequest = pending
@@ -144,8 +148,10 @@ class MainActivity : GameActivity() {
             try {
                 startActivityForResult(intent, RESOURCE_FOLDER_REQUEST_CODE)
             } catch (error: Exception) {
-                synchronized(requestLock) { activeRequest = null }
-                results[request.id] = ""
+                synchronized(requestLock) {
+                    if (activeRequest?.id == request.id) activeRequest = null
+                }
+                documentResults.complete(request.id, "")
                 Toast.makeText(this, "SolidCraft: ${error.message ?: "No folder picker is available"}", Toast.LENGTH_LONG).show()
             }
         }
@@ -153,6 +159,7 @@ class MainActivity : GameActivity() {
 
     private fun finishResourceFolderSelection(request: DocumentRequest, treeUri: Uri, grantedFlags: Int) {
         try {
+            if (!documentResults.isPending(request.id)) return
             val readable = grantedFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION
             if (readable != 0) {
                 try {
@@ -173,10 +180,11 @@ class MainActivity : GameActivity() {
                 open = { contentResolver.openInputStream(file.uri) },
             )
             ExternalResourceStaging.copyRequired(entry(tree), targetRoot, request.resourcePaths, MAX_GLTF_BUFFER_BYTES)
-            results[request.id] = stagedPath
+            documentResults.complete(request.id, stagedPath)
         } catch (error: Exception) {
-            runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Could not copy the glTF buffers"}", Toast.LENGTH_LONG).show() }
-            results[request.id] = ""
+            if (documentResults.complete(request.id, "")) {
+                runOnUiThread { Toast.makeText(this, "SolidCraft: ${error.message ?: "Could not copy the glTF buffers"}", Toast.LENGTH_LONG).show() }
+            }
         }
     }
 
@@ -196,8 +204,7 @@ class MainActivity : GameActivity() {
         private const val DOCUMENT_REQUEST_CODE = 7321
         private const val RESOURCE_FOLDER_REQUEST_CODE = 7322
         private const val MAX_GLTF_BUFFER_BYTES = 1L shl 30
-        private val results = ConcurrentHashMap<Long, String>()
-        private val requested = ConcurrentHashMap.newKeySet<Long>()
+        private val documentResults = DocumentRequestResults()
         private val requestLock = Any()
         private var activeRequest: DocumentRequest? = null
         @Volatile private var activeActivity: WeakReference<MainActivity>? = null
@@ -214,11 +221,10 @@ class MainActivity : GameActivity() {
         /** Called from the Rust render thread. Activity launches are always posted to Android's UI thread. */
         @JvmStatic
         fun requestDocument(id: Long, save: Boolean, name: String, extensions: Array<String>) {
-            if (!requested.add(id)) return
+            if (!documentResults.register(id)) return
             val activity = activeActivity?.get()
             if (activity == null) {
-                requested.remove(id)
-                results[id] = ""
+                documentResults.complete(id, "")
                 return
             }
             val request = DocumentRequest(id, save, name, extensions)
@@ -226,10 +232,9 @@ class MainActivity : GameActivity() {
                 synchronized(requestLock) {
                     // The Rust picker future may have been dropped while this UI-thread task was
                     // queued. Do not launch a picker for a request that no longer has a consumer.
-                    if (id !in requested) return@runOnUiThread
+                    if (!documentResults.isPending(id)) return@runOnUiThread
                     if (activeRequest != null) {
-                        requested.remove(id)
-                        results[id] = ""
+                        documentResults.complete(id, "")
                         return@runOnUiThread
                     }
                     activeRequest = request
@@ -251,9 +256,10 @@ class MainActivity : GameActivity() {
                 try {
                     activity.startActivityForResult(intent, DOCUMENT_REQUEST_CODE)
                 } catch (error: Exception) {
-                    synchronized(requestLock) { activeRequest = null }
-                    requested.remove(id)
-                    results[id] = ""
+                    synchronized(requestLock) {
+                        if (activeRequest?.id == id) activeRequest = null
+                    }
+                    documentResults.complete(id, "")
                     Toast.makeText(activity, "SolidCraft: ${error.message ?: "No document picker is available"}", Toast.LENGTH_LONG).show()
                 }
             }
@@ -261,20 +267,14 @@ class MainActivity : GameActivity() {
 
         /** Null means pending; empty string means the user cancelled or the picker failed. */
         @JvmStatic
-        fun takeDocumentResult(id: Long): String? {
-            val value = results.remove(id) ?: return null
-            requested.remove(id)
-            return value
-        }
+        fun takeDocumentResult(id: Long): String? = documentResults.take(id)
 
         /** Called when the Rust picker future is dropped before Android returns a result. */
         @JvmStatic
         fun cancelDocumentRequest(id: Long) {
-            requested.remove(id)
-            results.remove(id)
-            synchronized(requestLock) {
-                if (activeRequest?.id == id) activeRequest = null
-            }
+            // Keep an active picker request as a tombstone until its result arrives. Reusing the
+            // request code before then could misapply the old picker result to a newer request.
+            documentResults.cancel(id)
         }
 
         /** Copies a staged CAD save back to its persisted document-provider URI. Empty means success. */
