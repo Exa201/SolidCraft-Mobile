@@ -236,3 +236,16 @@ Ran `cargo test -j 1 -p solidcraft-ui-egui navigation::tests --lib` from the cur
 - Targeted `cargo test -j 1 -p solidcraft-ui-egui browser_card_tests --lib`: not completed. The first attempt failed while concurrently running workspace formatting because Windows could not mmap Rust test metadata (`os error 1455`, paging file too small). The retry ran alone, but `rustc` spent over eight minutes compiling `solidcraft-ui-egui` with no output and was interrupted after CPU and working-set growth stopped; no test result was produced. Use the repository Linux CI for this patch.
 - Android workflow `40261505911` is for the prior source commit `7ba2fa26`, not this change; it cannot validate this patch. GitHub CLI's default repository is the upstream desktop repo (`tangency-labs/solidcraft`), so all PR/CI queries must explicitly use `-R Exa201/SolidCraft-Mobile`.
 - Release readiness is unchanged: this incremental touch-target fix does not satisfy full CAD parity, runtime/device QA, release-signing, or prerelease requirements.
+
+### Touch-target change on PR head `f17dbaeb` (2026-10-26)
+
+- Android APK workflow [40263673467](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40263673467) passed for the exact source commit. This includes `:app:testDebugUnitTest`, the Android APK build, split ABI and signature verification, and artifact upload.
+- Packaging lint [40263673398](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40263673398) passed.
+- Downloaded both APKs from that run and independently checked package metadata, SDK levels, ABI contents, APK v2 signature, and signer count:
+
+| Artifact | Size | SHA-256 | Packaged ABI | Signature |
+| --- | ---: | --- | --- | --- |
+| `app-arm64-v8a-debug.apk` | 93,100,618 bytes | `66BBB36511125ADAA76A7705491633E39E20F4BCD93077A0C6554DF84253B88B` | `arm64-v8a` only | v2 verified, one signer |
+| `app-x86_64-debug.apk` | 109,769,431 bytes | `979DF92C7B316D982D1AA3BE81FE899E23DA48E4B69E988F731523C40803F782` | `x86_64` only | v2 verified, one signer |
+
+Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/compile SDK 37. They are debug-signed CI builds and are not a production release. The repository CI run [40263673386](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40263673386) remains pending with no jobs because PR #1 lacks the `approved-for-ci` maintainer review label. The local targeted Rust `browser_card_tests` run did not complete: the ordinary debug profile first hit Windows paging-file pressure; its reduced-debug retry ended when the execution session disappeared while Cargo was still compiling dependencies. It produced no test result and must not be counted as passed.
