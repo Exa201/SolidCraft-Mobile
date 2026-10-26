@@ -68,6 +68,27 @@ jobs:
         run: cargo install cargo-ndk --locked
       - name: Test Android host code and build APK
         run: bash gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Verify split APKs and signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_dir="app/build/outputs/apk/debug"
+          arm_apk="$apk_dir/app-arm64-v8a-debug.apk"
+          x86_apk="$apk_dir/app-x86_64-debug.apk"
+          test -f "$arm_apk"
+          test -f "$x86_apk"
+          apk_count=$(find "$apk_dir" -maxdepth 1 -type f -name '*.apk' | wc -l)
+          test "$apk_count" -eq 2
+
+          for spec in "arm64-v8a:$arm_apk" "x86_64:$x86_apk"; do
+            expected_abi=${spec%%:*}
+            apk=${spec#*:}
+            badging=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$apk")
+            grep -q "^package: name='org.solidcraft.mobile'" <<<"$badging"
+            actual_abi=$(sed -n 's/^native-code: //p' <<<"$badging")
+            test "$actual_abi" = "'$expected_abi'"
+            "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$apk"
+          done
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:

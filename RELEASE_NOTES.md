@@ -15,7 +15,7 @@ SolidCraft Mobile currently starts the shared SolidCraft Rust engine and CAD int
 - The shared unsaved-design recovery service now starts in an Android-private recovery directory using the saved autosave interval; forced-crash recovery on device still needs verification.
 - The CAD viewport now hides Android system bars so the top toolbar remains touchable; temporary system bars can still be revealed with an edge swipe.
 - On narrow portrait windows, the floating Browser starts as a compact header to preserve the viewport and expands by touch to the full model tree. The shared Browser test group passes 12/12; the behavior was also checked on an API 36 emulator.
-- The latest debug APK installed and launched on both an API 36 emulator and a physical Android 16 device; these are launch/display smoke checks, not complete CAD workflow validation.
+- Earlier debug APKs installed and launched on an API 36 emulator and a physical Android 16 device; these are launch/display smoke checks, not validation of the latest dual-ABI artifacts or complete CAD workflow. The latest GitHub APKs passed package and signature checks but await device installation; see [TEST_REPORT.md](TEST_REPORT.md).
 
 ### Not yet release-ready
 

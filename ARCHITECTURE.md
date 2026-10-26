@@ -2,7 +2,7 @@
 
 ## Current state
 
-SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui interface in a native Android application. Kotlin is used for Android platform APIs and lifecycle integration; Rust remains the owner of CAD documents, commands, geometry, undo/recovery, and rendering. The Android application targets API 37, supports API 28 and later, and currently packages the `arm64-v8a` ABI.
+SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui interface in a native Android application. Kotlin is used for Android platform APIs and lifecycle integration; Rust remains the owner of CAD documents, commands, geometry, undo/recovery, and rendering. The Android application targets API 37, supports API 28 and later, and packages separate `arm64-v8a` and `x86_64` APKs. The available Android 16 x86_64 emulator currently fails during app startup, so that ABI has not been runtime-verified; see `TEST_REPORT.md`.
 
 ```text
 Android Activity (Kotlin / GameActivity)
@@ -51,8 +51,8 @@ The existing Rust UI switches the command ribbon to compact icon presentation be
 - Android Kotlin unit tests cover CAD MIME mappings, SAF filter behavior, safe relative glTF paths, sidecar discovery, and GLB little-endian JSON extraction.
 - The API 36 emulator has verified SAF Save As to Downloads, process restart, opening through DocumentsUI, Open Recent persistence, and overwriting the same SAF document with an added body before reopening; asynchronous DXF export through Downloads was also verified in an earlier emulator pass.
 - Rust host tests cover navigation, touch ownership and expanded selection hit slop. They do not prove physical-device touch precision.
-- A full `cargo xtask ci` run for the exact working tree is in progress; `TEST_REPORT.md` records completed subtests and must be updated with its final result.
-- The latest debug APK including wgpu initialization has been installed and verified with an interactive box-creation flow on the API 36 emulator. Physical-device rendering and production signing remain unverified.
+- The latest local full-suite attempt is recorded in `TEST_REPORT.md`; it was interrupted during an expensive kernel test and is not counted as a complete pass. The PR's heavy general CI is also pending its `approved-for-ci` review gate.
+- A prior debug APK was installed and verified with an interactive box-creation flow on the API 36 emulator. The APKs from the latest GitHub run were package- and signature-verified, but not installed because the available x86_64 Android 16 emulators fail during startup. Physical-device rendering of the latest commit and production signing remain unverified.
 
 ## Android UI strategy and remaining work
 
