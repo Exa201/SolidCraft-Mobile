@@ -223,3 +223,7 @@ Android APK workflow [40257517517](https://github.com/Exa201/SolidCraft-Mobile/a
 | `app-x86_64-debug.apk` | 109,768,247 bytes | `E9740E11014F487BDA563C898CBF6F7FB754333CAA6553653C4615F22260342A` | `x86_64` only | v2 verified, one signer |
 
 Both report package `org.solidcraft.mobile`, version `0.1.0`, and compile/target SDK 37. They are debug-signed and not runtime-tested. General CI run [40257517549](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40257517549) is still `pending` with no jobs because the PR has not passed the repository's `approved-for-ci` review gate. No gate was bypassed.
+
+### Rust touch-navigation regression tests on PR source (2026-10-26, commit `928a6907`)
+
+Ran `cargo test -j 1 -p solidcraft-ui-egui navigation::tests --lib` from the current PR checkout. The test profile rebuilt the crate graph and completed in 13m59s. All 17 navigation tests passed (0 failed, 0 ignored), covering two-finger pan/pinch, three-finger orbit, touch outside the viewport, flat-page navigation, camera pivot behavior, and the invariant that navigation does not edit the CAD model. These are Rust host tests; they do not replace Android device gesture testing.
