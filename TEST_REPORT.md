@@ -208,3 +208,18 @@ The Android APK workflow [40255403459](https://github.com/Exa201/SolidCraft-Mobi
 | `app-x86_64-debug.apk` | 109,768,247 bytes | `09D8B9AA077F5A9FE746DE77F9FB53040C5F61137EA71C904ECAAD3F85F0156B` | `x86_64` only | v2 verified, one signer |
 
 Both APKs report package `org.solidcraft.mobile` and version `0.1.0`. They are debug-signed CI artifacts; this run does not verify a production-signed release or runtime behavior on a healthy Android device. The PR's general CI remains subject to the repository's `approved-for-ci` review gate.
+
+### Native ARM64 Android 16 emulator startup attempt (2026-10-26)
+
+Installed the API-36 Google APIs `arm64-v8a` system image and created an isolated `solidcraft_arm64_api36` AVD to test the native ABI without the x86_64 translation layer. The AVD did not boot: Android Emulator 37.1.11 logged `FATAL: Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator on x86_64 host. System image must match the host architecture.` The host is an Intel i7-9750H and Windows reports firmware virtualization and VM monitor extensions disabled. This is an emulator-host limitation, not an app startup result; it provides no runtime verification. Existing OrkanSlicer devices were not used.
+
+### PR head `cd9e17a0` Android CI and packaging verification (2026-10-26)
+
+Android APK workflow [40257517517](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40257517517) passed for `cd9e17a0887caaa8aaa3244174569e53db944a45`, including Android host tests, native builds, split-APK verification and artifact upload. Packaging lint workflow [40257517520](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40257517520) also passed. Downloaded both APKs from the exact run and independently checked their metadata, ABI, v2 signature, signer count, size, and SHA-256:
+
+| Artifact | Size | SHA-256 | Packaged ABI | Signature |
+| --- | ---: | --- | --- | --- |
+| `app-arm64-v8a-debug.apk` | 93,110,378 bytes | `9ABA6AE92F17890515B927B1EA2FC24EEB4D4ACEF54D94B9042C606CAFF8A507` | `arm64-v8a` only | v2 verified, one signer |
+| `app-x86_64-debug.apk` | 109,768,247 bytes | `E9740E11014F487BDA563C898CBF6F7FB754333CAA6553653C4615F22260342A` | `x86_64` only | v2 verified, one signer |
+
+Both report package `org.solidcraft.mobile`, version `0.1.0`, and compile/target SDK 37. They are debug-signed and not runtime-tested. General CI run [40257517549](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40257517549) is still `pending` with no jobs because the PR has not passed the repository's `approved-for-ci` review gate. No gate was bypassed.
