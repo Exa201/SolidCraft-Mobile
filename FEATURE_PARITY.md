@@ -167,7 +167,7 @@ Diese Inventur wird aus [`docs/features.md`](docs/features.md) abgeleitet, dem v
 | Surfaces | Extend | `surface.extend` | `crates/engine/src/cmd/surface.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Surfaces | Surface Extrude | `surface.extrude` | `crates/engine/src/cmd/surface.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Surfaces | Fair Surface | `surface.fair` | `crates/engine/src/cmd/surface.rs` | Gemeinsam vorhanden, mobil ungeprüft |
-| Surfaces | Surface Fillet)* | `surface.fillet` | `crates/engine/src/cmd/` (Registry-Referenz: docs/features.md) | Im Original geplant |
+| Surfaces | Surface Fillet)* | `surface.fillet` | `crates/engine/src/cmd/surface.rs` (planned registry entry) | Im Original geplant |
 | Surfaces | Surface Loft | `surface.loft` | `crates/engine/src/cmd/surface.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Surfaces | Match Surface | `surface.match` | `crates/engine/src/cmd/surface_match.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Surfaces | Offset Surface | `surface.offset` | `crates/engine/src/cmd/surface.rs` | Gemeinsam vorhanden, mobil ungeprüft |
@@ -300,10 +300,10 @@ Diese Inventur wird aus [`docs/features.md`](docs/features.md) abgeleitet, dem v
 | Inspect | Measure (I) | `inspect.measure` | `crates/engine/src/cmd/inspect.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Inspect | Minimum Radius Analysis | `inspect.minimum_radius` | `crates/engine/src/cmd/sketch_inspect.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Inspect | Section Analysis | `inspect.section` | `crates/engine/src/cmd/section.rs` | Gemeinsam vorhanden, mobil ungeprüft |
-| Inspect | Silhouette | `inspect.silhouette` | `crates/engine/src/cmd/` (Registry-Referenz: docs/features.md) | Gemeinsam vorhanden, mobil ungeprüft |
+| Inspect | Silhouette | `inspect.silhouette` | `crates/engine/src/cmd/silhouette.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Inspect | Zebra Analysis | `inspect.zebra` | `crates/engine/src/cmd/surface_analysis.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Files | Export | `file.export` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Exportpfad auf Android ungeprüft |
-| Files | Export Current View as DXF | `file.export_view_dxf` | `crates/engine/src/cmd/` (Registry-Referenz: docs/features.md) | API-36-Emulator: DXF asynchron erzeugt und über SAF zurückgeschrieben; Datei 19.265 Byte, Header AC1015 verifiziert |
+| Files | Export Current View as DXF | `file.export_view_dxf` | `crates/engine/src/cmd/view_dxf.rs` | API-36-Emulator: DXF asynchron erzeugt und über SAF zurückgeschrieben; Datei 19.265 Byte, Header AC1015 verifiziert |
 | Files | Insert Mesh | `file.insert_mesh` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Importpfad auf Android ungeprüft |
 | Files | Insert STEP | `file.insert_step` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Importpfad auf Android ungeprüft |
 | Files | New Design (Ctrl+N) | `file.new` | `crates/engine/src/cmd/file.rs` | Gemeinsam vorhanden, mobil ungeprüft; Android-Dateizugriff fehlt |
