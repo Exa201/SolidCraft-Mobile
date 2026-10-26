@@ -180,9 +180,11 @@ The Android APK workflow [40246576683](https://github.com/Exa201/SolidCraft-Mobi
 
 The general CI run [40246576699](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40246576699) is still pending with no jobs started. The APKs are debug-signed and were package-checked, not installed on a device; emulator and signing limitations above remain.
 
-### SAF picker cancellation race fix (working tree after `ac5f7a9c`, 2026-10-26)
+### SAF picker cancellation race fix (commit `a154fb13`, 2026-10-26)
 
 Replaced the separate concurrent pending/result maps with a synchronized `DocumentRequestResults` registry. Completion and cancellation now serialize, so a late provider worker cannot republish a result after the Rust request has been dropped. An in-flight system picker remains as a request-code tombstone until Android returns its result, preventing that stale result from being assigned to a newer picker request. Kotlin unit tests cover one-shot result consumption, late completion after cancellation, cancellation of completed results, request-ID reuse, and concurrent cancellation/completion. `:app:testDebugUnitTest -x :app:buildRustAndroid --no-daemon` passed all five JVM suites: 39 tests, 0 failures, 0 errors (16 CAD document types, 5 request-result registry, 5 staging, 9 provider save-back, 4 external-resource staging). The local run skipped native Rust compilation; picker cancellation behavior has not yet been exercised through Android UI on a healthy device.
+
+The same commit's Android workflow [40250886408](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40250886408) passed host tests, native builds, the automated split-APK/signature checks, and artifact upload. Downloaded the exact run artifacts: `app-arm64-v8a-debug.apk` (93,110,378 bytes, SHA-256 `42BAD3580CE04B1F11A69B0EF652250BE1AC4219E7C853D781DF60C2446D422B`) contains only `arm64-v8a`; `app-x86_64-debug.apk` (109,768,247 bytes, SHA-256 `DE8DF7937E96441312B379974FE30E955FC0169F02BA33A450FCC015F8F20F21`) contains only `x86_64`. Both APK Signature Scheme v2 signatures verify with one signer. These are debug builds, not release-signed or device runtime verified.
 
 ### API-36 Android touch continuation (2026-10-25, installed APK)
 
