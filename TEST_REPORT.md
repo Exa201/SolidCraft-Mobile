@@ -227,3 +227,12 @@ Both report package `org.solidcraft.mobile`, version `0.1.0`, and compile/target
 ### Rust touch-navigation regression tests on PR source (2026-10-26, commit `928a6907`)
 
 Ran `cargo test -j 1 -p solidcraft-ui-egui navigation::tests --lib` from the current PR checkout. The test profile rebuilt the crate graph and completed in 13m59s. All 17 navigation tests passed (0 failed, 0 ignored), covering two-finger pan/pinch, three-finger orbit, touch outside the viewport, flat-page navigation, camera pivot behavior, and the invariant that navigation does not edit the CAD model. These are Rust host tests; they do not replace Android device gesture testing.
+# Current continuation — browser touch target (2026-10-26)
+
+- Added responsive model-browser rows: 48 points below a 600-point viewport width, retaining the 26-point desktop density above that breakpoint.
+- Added a browser-card regression case that creates a body, expands the phone browser, clicks near the bottom of its row, checks body selection, then resizes to desktop width and checks the compact row height.
+- `cargo fmt --all -- --check`: passed after formatting the new assertion.
+- `git diff --check`: passed on the final source and documentation changes.
+- Targeted `cargo test -j 1 -p solidcraft-ui-egui browser_card_tests --lib`: not completed. The first attempt failed while concurrently running workspace formatting because Windows could not mmap Rust test metadata (`os error 1455`, paging file too small). The retry ran alone, but `rustc` spent over eight minutes compiling `solidcraft-ui-egui` with no output and was interrupted after CPU and working-set growth stopped; no test result was produced. Use the repository Linux CI for this patch.
+- Android workflow `40261505911` is for the prior source commit `7ba2fa26`, not this change; it cannot validate this patch. GitHub CLI's default repository is the upstream desktop repo (`tangency-labs/solidcraft`), so all PR/CI queries must explicitly use `-R Exa201/SolidCraft-Mobile`.
+- Release readiness is unchanged: this incremental touch-target fix does not satisfy full CAD parity, runtime/device QA, release-signing, or prerelease requirements.

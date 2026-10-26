@@ -281,7 +281,15 @@ pub fn group_action(app: &mut SolveApp, action: &str, p: &Value) {
 // Drawing
 // ---------------------------------------------------------------------------------------------
 
-const ROW_H: f32 = crate::ui_kit::TREE_ROW_HEIGHT;
+const DESKTOP_ROW_H: f32 = crate::ui_kit::TREE_ROW_HEIGHT;
+/// A model-tree row is also a touch target. On phone-width viewports, keep the complete row at
+/// Android's 48-point target height so its label, disclosure, eye and component controls remain
+/// reachable without requiring precision taps.
+const PHONE_ROW_H: f32 = 48.0;
+
+fn row_height_for_width(width: f32) -> f32 {
+    if width.is_finite() && width < 600.0 { PHONE_ROW_H } else { DESKTOP_ROW_H }
+}
 /// The floating card's inner margin: the header highlight sits this far from the card's top, left
 /// and right edges, so its corners are concentric with the card's.
 const CARD_INSET: f32 = 4.0;
@@ -344,15 +352,16 @@ pub(crate) struct RowResp {
 
 pub(crate) fn draw_row(ui: &mut egui::Ui, id: egui::Id, row: &Row) -> RowResp {
     let t = Tokens::get();
+    let row_height = row_height_for_width(ui.ctx().content_rect().width());
     // Rows scrolled out of view only take their space: no widgets, no painting.
-    let r = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), ROW_H));
+    let r = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), row_height));
     if !ui.is_rect_visible(r) {
         ui.allocate_space(r.size());
         return RowResp { rect: Some(r), ..Default::default() };
     }
     // A stable id per row (not the layout position), so a press and its release stay on the
     // same row while rows above open or close.
-    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::hover());
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::hover());
     let resp = ui.interact(r, id, Sense::click_and_drag());
     // While something is dragged (an appearance swatch, drawn under the pointer) `hovered` is
     // off; the row under the pointer still counts, so a drop lands on it.

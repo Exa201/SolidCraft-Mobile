@@ -123,6 +123,7 @@ fn browser_header_folds_the_floating_card_to_its_header_and_back() {
 #[test]
 fn narrow_floating_browser_starts_compact_and_expands_on_touch() {
     let mut h = Harness::new();
+    h.app.run("solid.box", json!({"body_name":"Block", "operation":"new_body", "length":10, "width":10, "height":10})).unwrap();
     h.call("ui.resize", json!({"width":390,"height":844}));
     h.settle();
     let compact = rect_of("browser:card").unwrap();
@@ -135,10 +136,19 @@ fn narrow_floating_browser_starts_compact_and_expands_on_touch() {
     assert!(h.app.tree.mobile_expanded);
     assert!(handle_at("row:Untitled").is_some(), "expanding exposes the model tree");
     assert!((rect_of("browser:card").unwrap().width() - 250.0).abs() < 1.0);
+    let body_row = rect_of("row:Block").expect("the body row is reachable on a phone");
+    assert_eq!(body_row.height(), 48.0, "phone rows provide a full touch target");
+    h.call("ui.click", json!({"x":body_row.center().x,"y":body_row.bottom()-2.0}));
+    h.settle();
+    assert!(
+        h.app.session.selection.iter().any(|item| matches!(item, solidcraft_engine::Sel::Body { name } if name == "Block")),
+        "a touch near the bottom of the row still selects the body"
+    );
 
     h.call("ui.resize", json!({"width":900,"height":600}));
     h.settle();
     assert!(!h.app.tree.panel_collapsed);
+    assert_eq!(rect_of("row:Block").unwrap().height(), 26.0, "desktop density is preserved");
 }
 
 /// Tiny or odd window sizes never panic: the cards leave out what cannot fit.
