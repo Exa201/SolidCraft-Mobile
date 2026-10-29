@@ -38,7 +38,8 @@ env:
 
 jobs:
   image:
-    if: ${{ !github.event.repository.private }}
+    # Android APK previews are not releases of the browser app/container.
+    if: ${{ !github.event.repository.private && !(github.event_name == 'release' && contains(github.event.release.tag_name, '-android-preview.')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
