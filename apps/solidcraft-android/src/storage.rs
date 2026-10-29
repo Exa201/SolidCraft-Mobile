@@ -89,7 +89,7 @@ fn share_mesh_dir() -> Result<String, String> {
 }
 
 fn share_mesh(path: &str, mime_type: &str) -> Result<(), String> {
-    with_jni(|env| {
+    let accepted = with_jni(|env| {
         let class = activity_class(env)?;
         let path = env.new_string(path)?;
         let path_object: JObject<'_> = path.into();
@@ -103,9 +103,9 @@ fn share_mesh(path: &str, mime_type: &str) -> Result<(), String> {
                 &[JValue::Object(&path_object), JValue::Object(&mime_object)],
             )?
             .z()?;
-        if accepted { Ok(()) } else { Err("Android could not open the mesh sharing panel".to_string()) }
-    })
-    .map_err(jni_error)?
+        Ok(accepted)
+    })?;
+    if accepted { Ok(()) } else { Err("Android could not open the mesh sharing panel".to_string()) }
 }
 
 fn request_document(id: i64, save: bool, name: &str, extensions: &[String]) -> Result<(), String> {
