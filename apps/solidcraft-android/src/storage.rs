@@ -69,8 +69,43 @@ pub(super) fn services() -> Services {
         pick_open: Some(Box::new(|extensions| picker(false, "", extensions))),
         pick_save: Some(Box::new(|name, extensions| picker(true, name, extensions))),
         persist_document_save: Some(std::sync::Arc::new(persist_document_save)),
+        share_mesh: Some(Box::new(share_mesh)),
+        share_mesh_dir: Some(Box::new(share_mesh_dir)),
         ..Default::default()
     }
+}
+
+fn share_mesh_dir() -> Result<String, String> {
+    with_jni(|env| {
+        let class = activity_class(env)?;
+        let directory = env.call_static_method(class, jni_str!("meshShareDirectory"), jni_sig!("()Ljava/lang/String;"), &[])?.l()?;
+        if directory.is_null() {
+            return Err(jni::errors::Error::NullPtr("Android mesh share directory is unavailable"));
+        }
+        let directory = JString::cast_local(env, directory)?;
+        directory.try_to_string(env)
+    })
+    .map_err(jni_error)
+}
+
+fn share_mesh(path: &str, mime_type: &str) -> Result<(), String> {
+    with_jni(|env| {
+        let class = activity_class(env)?;
+        let path = env.new_string(path)?;
+        let path_object: JObject<'_> = path.into();
+        let mime_type = env.new_string(mime_type)?;
+        let mime_object: JObject<'_> = mime_type.into();
+        let accepted = env
+            .call_static_method(
+                class,
+                jni_str!("shareMesh"),
+                jni_sig!("(Ljava/lang/String;Ljava/lang/String;)Z"),
+                &[JValue::Object(&path_object), JValue::Object(&mime_object)],
+            )?
+            .z()?;
+        if accepted { Ok(()) } else { Err("Android could not open the mesh sharing panel".to_string()) }
+    })
+    .map_err(jni_error)?
 }
 
 fn request_document(id: i64, save: bool, name: &str, extensions: &[String]) -> Result<(), String> {

@@ -2,7 +2,9 @@ package org.solidcraft.mobile
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.SystemClock
+import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -10,14 +12,40 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityLifecycleTest {
+    @Test
+    fun meshShareProviderExposesOnlyTheDedicatedCacheFolder() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val shareDirectory = File(context.cacheDir, "solidcraft-share").apply { assertTrue(isDirectory || mkdirs()) }
+        val file = File(shareDirectory, "provider-test.stl").apply { writeText("solid test") }
+        val privateFile = File(context.cacheDir, "not-shareable.txt").apply { writeText("private") }
+        try {
+            val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            assertEquals("content", uri.scheme)
+            assertTrue(uri.path.orEmpty().contains("solidcraft_mesh_exports"))
+            var privateFileRejected = false
+            try {
+                FileProvider.getUriForFile(context, "${context.packageName}.files", privateFile)
+            } catch (_: IllegalArgumentException) {
+                privateFileRejected = true
+            }
+            assertTrue("Files outside the export cache must not be exposed", privateFileRejected)
+        } finally {
+            file.delete()
+            privateFile.delete()
+            shareDirectory.delete()
+        }
+    }
+
     @Test
     fun activityAndViewportHostSurviveRotationAndKeepSystemBarsHidden() {
         val scenario = ActivityScenario.launch(MainActivity::class.java)

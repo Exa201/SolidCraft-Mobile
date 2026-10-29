@@ -241,6 +241,14 @@ Ran `cargo test -j 1 -p solidcraft-ui-egui navigation::tests --lib` from the cur
 - Commit `61c107e3` contains this test correction. Packaging lint passed for commits `61c107e3`, `4e0186a7`, and `2a68ff48`; current-head lint/actionlint passed in run `40965749283`. The Android APK workflows for follow-up heads `40965296105`, `40965435541`, `40965615116`, and `40965749374` were cancelled before host tests or APK packaging completed because newer commits superseded their heads. The latest full CI attempt was also cancelled before jobs began; no maintainer gate was bypassed. The last completed APK workflow remains run `40376148382` on production source commit `a9fd1619`, the source used for Preview 2. The later changes are tests, workflow guards, and documentation.
 - Full release readiness remains unmet: desktop feature parity, broader physical-device and touch workflow validation, and production signing remain outstanding.
 
+### Android mesh sharing continuation (2026-10-30, working tree)
+
+- Added an Android-only “Share mesh” path for STL and 3MF. It exports to a unique app-cache file, uses a narrowly scoped `FileProvider` URI and `ACTION_SEND`, and grants receiving apps read access. Cache entries older than seven days are removed when the chooser opens. Desktop slicer detection and process launch behavior are unchanged.
+- Added Rust tests for Android export command parameters and STL/3MF MIME types: final `cargo test -p solidcraft-ui-egui --profile ci --lib dialogs_save_mesh::tests` passed 2/2 after the locale changes.
+- `:app:testDebugUnitTest` and `:app:compileDebugAndroidTestKotlin` passed locally with `-x :app:buildRustAndroid` (39 JVM tests, 0 failures). Targeted `:app:connectedDebugAndroidTest` also passed on the API 36 `small_phone` x86_64 emulator (1/1): the FileProvider creates a content URI for the dedicated mesh-cache folder and rejects files outside it. This test does not launch the chooser or deliver a mesh to a slicer. These Gradle commands do not compile the Rust Android JNI callback.
+- `cargo fmt --all -- --check`, locale JSON parsing and `git diff --check` pass. No connected Xiaomi/ARM64 device is available in this session; the visible emulator is x86_64.
+- Android APK workflow [40965988223](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40965988223) passed for base commit `6daae56f` and uploaded both ABI artifacts. It does not include this working-tree change. No new prerelease has been published from this source yet.
+
 ### Touch-target change on PR head `f17dbaeb` (2026-10-26)
 
 - Android APK workflow [40263673467](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/40263673467) passed for the exact source commit. This includes `:app:testDebugUnitTest`, the Android APK build, split ABI and signature verification, and artifact upload.

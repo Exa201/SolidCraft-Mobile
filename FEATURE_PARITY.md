@@ -309,8 +309,8 @@ Diese Inventur wird aus [`docs/features.md`](docs/features.md) abgeleitet, dem v
 | Files | New Design (Ctrl+N) | `file.new` | `crates/engine/src/cmd/file.rs` | Gemeinsamer Befehl vorhanden; Android-Neudesign-Workflow noch nicht separat verifiziert |
 | Files | Save (Ctrl+S) | `file.save` | `crates/engine/src/cmd/file.rs` | Physisches Android 16: SAF-Datei überschrieben, nach Prozessneustart wieder geöffnet; Save-As und Providerfehler separat prüfen |
 | Files | Save As | `file.save_as` | `crates/engine/src/cmd/file.rs` | API-36-Emulator: SAF-Datei geschrieben (8.919 Byte) und nach Prozessneustart erneut geöffnet |
-| Files | Save As Mesh | `file.save_mesh` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Exportpfad auf Android ungeprüft |
-| Files | Installed Slicers | `file.slicers` | `crates/engine/src/cmd/file.rs` | Android-Erkennung und Übergabe an installierte externe Slicer nicht implementiert |
+| Files | Save As Mesh | `file.save_mesh` | `crates/engine/src/cmd/file.rs` | SAF-Export bleibt verfügbar; zusätzlich Android-App-Auswahl für STL/3MF per FileProvider implementiert, Laufzeitübergabe am Gerät noch ungeprüft |
+| Files | Installed Slicers | `file.slicers` | `crates/engine/src/cmd/file.rs` | Android-Slicer-Erkennung für `file.slicers` nicht implementiert; Save As Mesh bietet stattdessen die systemweite Android-App-Auswahl mit exportierter Datei |
 | Documents | Open (Ctrl+O) | `crates/engine/src/cmd/file.rs` | API-36-Emulator und Android 16: SolidCraft-Datei aus Downloads geöffnet und nach Prozessneustart erneut geöffnet; SAF-Einlesen tauscht die Arbeitskopie nun erst nach vollständig erfolgreichem Kopieren atomar aus |
 | Documents | Recover Design | `doc.recover` | `crates/engine/src/cmd/file.rs` | Gemeinsamer Befehl vorhanden; Android-Absturz-Wiederherstellung noch nicht verifiziert |
 | Documents | Discard Recovered Design | `doc.recovery_discard` | `crates/engine/src/cmd/file.rs` | Gemeinsamer Befehl vorhanden; Android-Absturz-Wiederherstellung noch nicht verifiziert |

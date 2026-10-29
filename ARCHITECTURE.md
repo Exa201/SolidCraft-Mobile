@@ -8,7 +8,8 @@ SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui inte
 Android Activity (Kotlin / GameActivity)
   ├─ Android lifecycle, immersive window, text input
   ├─ Storage Access Framework and ContentResolver
-  └─ JNI callbacks for document picker and write-back
+  ├─ FileProvider and Android app chooser for exported meshes
+  └─ JNI callbacks for document picker, write-back and mesh sharing
           ↓ GameActivity native loading / JNI
 Rust Android entry (apps/solidcraft-android)
   ├─ eframe + egui
@@ -24,6 +25,8 @@ Shared wgpu rendering
 ## Platform boundary and data flow
 
 `MainActivity` is a `GameActivity` host. It hides system bars while retaining transient gesture access, registers itself for JNI callbacks, and starts SAF intents on the Android UI thread. It does not implement CAD commands or duplicate the Rust interface in Compose.
+
+Mesh exports stay in the app's private cache until the user selects an Android app. Rust writes STL or 3MF to a unique cache file; Kotlin checks that it is inside the dedicated share folder and returns a read-only `FileProvider` URI through `ACTION_SEND`. The chooser grants read access to the receiving app. Old exports are pruned after seven days. Desktop slicer detection and process launching remain separate and are not available through Android's app chooser.
 
 The engine accepts filesystem paths, so SAF documents are copied into durable app-private storage. Open selections are staged before the Rust file command receives the path. Save selections retain a URI-to-staged-path mapping; Rust saves to the staged file and the Kotlin bridge writes the completed file back through `ContentResolver`. Persistable grants are retained when the provider supports them. No broad storage permission is requested. The staged workspace is not the user-visible source of truth: provider write failures are returned to the save workflow.
 
@@ -51,11 +54,11 @@ The existing Rust UI switches the command ribbon to compact icon presentation be
 - Android Kotlin unit tests cover CAD MIME mappings, SAF filter behavior, safe relative glTF paths, sidecar discovery, and GLB little-endian JSON extraction.
 - The API 36 emulator has verified SAF Save As to Downloads, process restart, opening through DocumentsUI, Open Recent persistence, and overwriting the same SAF document with an added body before reopening; asynchronous DXF export through Downloads was also verified in an earlier emulator pass.
 - Rust host tests cover navigation, touch ownership and expanded selection hit slop. They do not prove physical-device touch precision.
-- The latest local full-suite attempt is recorded in `TEST_REPORT.md`; it was interrupted during an expensive kernel test and is not counted as a complete pass. The PR's heavy general CI is also pending its `approved-for-ci` review gate.
-- A prior debug APK was installed and verified with an interactive box-creation flow on the API 36 emulator. The APKs from the latest GitHub run were package- and signature-verified, but not installed because the available x86_64 Android 16 emulators fail during startup. Physical-device rendering of the latest commit and production signing remain unverified.
+- The last full local Rust suite passed on the source state recorded in `TEST_REPORT.md`; the current mesh-sharing path has its own targeted Rust test. Android JVM tests pass, and a targeted API 36 instrumentation test verifies that FileProvider exposes the dedicated mesh cache and rejects other cache files. Opening the system chooser and receiving the export in a slicer remain unverified.
+- Android APK workflow `40965988223` passed for commit `6daae56f`, including host tests, native APK build, split-ABI/signature verification and artifact upload. It predates the uncommitted Android mesh-sharing work. The Xiaomi preview remains a debug-signed test build; production signing and runtime verification of the current change remain outstanding.
 
 ## Android UI strategy and remaining work
 
 Keep CAD behavior and shared command semantics in Rust, and use Kotlin for Android APIs, lifecycle, SAF, and native host callbacks. Continue adding responsive egui layouts instead of a second Compose implementation of the same command system. Compose overlays should be considered only if they can coexist with GameActivity rendering without creating duplicate CAD behavior.
 
-The application remains a development preview. Full command-by-command Android usability, provider error and permission cases, multi-provider SAF tests, device CAD workflows, lifecycle recovery, small-screen dialogs, tablet adaptation, performance on complex models, release signing, exact-commit GitHub CI, and a verified prerelease remain outstanding. See `FEATURE_PARITY.md` and `TEST_REPORT.md` for current coverage and gaps.
+The application remains a development preview. Full command-by-command Android usability, provider error and permission cases, multi-provider SAF tests, device CAD workflows, lifecycle recovery, small-screen dialogs, tablet adaptation, performance on complex models, production release signing, and exact-commit CI for the current mesh-sharing change remain outstanding. See `FEATURE_PARITY.md` and `TEST_REPORT.md` for current coverage and gaps.

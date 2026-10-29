@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import com.google.androidgamesdk.GameActivity
 import java.io.File
@@ -204,6 +205,7 @@ class MainActivity : GameActivity() {
         private const val DOCUMENT_REQUEST_CODE = 7321
         private const val RESOURCE_FOLDER_REQUEST_CODE = 7322
         private const val MAX_GLTF_BUFFER_BYTES = 1L shl 30
+        private const val SHARE_CACHE_RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000
         private val documentResults = DocumentRequestResults()
         private val requestLock = Any()
         private var activeRequest: DocumentRequest? = null
@@ -263,6 +265,48 @@ class MainActivity : GameActivity() {
                     Toast.makeText(activity, "SolidCraft: ${error.message ?: "No document picker is available"}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+
+        /** Share a staged STL/3MF through Android's chooser, granting the receiving app read access. */
+        @JvmStatic
+        fun shareMesh(path: String, mimeType: String): Boolean {
+            val activity = activeActivity?.get() ?: return false
+            val file = File(path)
+            val shareDirectory = File(activity.cacheDir, "solidcraft-share")
+            if (!file.isFile || !file.canonicalPath.startsWith(shareDirectory.canonicalPath + File.separator)) return false
+            val cutoff = System.currentTimeMillis() - SHARE_CACHE_RETENTION_MILLIS
+            shareDirectory.listFiles()?.forEach { cached ->
+                if (cached != file && cached.isFile && cached.lastModified() < cutoff) cached.delete()
+            }
+            val uri = try {
+                FileProvider.getUriForFile(activity, "${activity.packageName}.files", file)
+            } catch (_: Exception) {
+                return false
+            }
+            activity.runOnUiThread {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = mimeType
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = android.content.ClipData.newUri(activity.contentResolver, file.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(send, "Open exported mesh")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                try {
+                    activity.startActivity(chooser)
+                } catch (error: Exception) {
+                    Toast.makeText(activity, "SolidCraft: ${error.message ?: "No compatible app is available"}", Toast.LENGTH_LONG).show()
+                }
+            }
+            return true
+        }
+
+        /** The private cache folder exposed by the narrowly scoped FileProvider. */
+        @JvmStatic
+        fun meshShareDirectory(): String? {
+            val activity = activeActivity?.get() ?: return null
+            val directory = File(activity.cacheDir, "solidcraft-share")
+            return if (directory.isDirectory || directory.mkdirs()) directory.absolutePath else null
         }
 
         /** Null means pending; empty string means the user cancelled or the picker failed. */

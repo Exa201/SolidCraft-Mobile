@@ -330,6 +330,10 @@ pub struct Services {
     pub pick_save: Option<Box<dyn Fn(&str, &[&str]) -> FilePickerFuture>>,
     /// Persist a staged save back to a host document URI after its local write succeeds.
     pub persist_document_save: Option<std::sync::Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>>,
+    /// Open an exported mesh in the host's app chooser (Android share sheet).
+    pub share_mesh: Option<Box<dyn Fn(&str, &str) -> Result<(), String>>>,
+    /// An app-private directory suitable for staging files passed to [`Services::share_mesh`].
+    pub share_mesh_dir: Option<Box<dyn Fn() -> Result<String, String>>>,
     /// Open a dialog for one file of a kind (its name, its extensions): on macOS a dialog allows
     /// only the types it names, so the agent chat's files need a dialog of their own. `None`: the
     /// Open dialog.
