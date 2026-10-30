@@ -284,3 +284,18 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - cargo test -p solidcraft-ui-egui --profile ci save_job::tests::save_writes_on_a_worker_and_is_taken_up_like_a_save_here --lib: passed (1/1). cargo test -p solidcraft-ui-egui --profile ci dialogs_save_mesh::tests --lib: passed (2/2) after moving that test module after production items. cargo fmt --all -- --check passed.
 - The first scoped Clippy run found clippy::items_after_test_module in dialogs_save_mesh.rs; moved the test module to the end without suppressing the lint. cargo clippy -p solidcraft-ui-egui --profile ci --tests -- -D warnings then passed.
 - This verifies the shared native save worker boundary with a simulated slow provider. It is not a device/provider performance measurement.
+
+
+### Mesh export and Android sharing on the background save worker (2026-10-30)
+
+- file.save_mesh now runs on the existing background worker for both save-to-file and Android share flows. The mesh output path is written back through persist_document_save on that worker; the source Session is not adopted as a saved CAD document. The Android share callback runs after export and provider write-back complete.
+- Added save_job::tests::mesh_export_persists_on_worker_without_marking_the_design_saved: a blocked provider callback confirms an intervening UI frame runs, persistence is off-thread, and the source remains dirty after completion (1/1). Existing save worker regression also passed (1/1).
+- Added dialogs_save_mesh::tests::mesh_share_opens_only_after_the_background_export_is_complete: validates that the share callback receives an existing nonempty STL with the expected MIME type (1/1). Existing mesh command tests passed (3/3).
+- cargo fmt --all -- --check and cargo clippy -p solidcraft-ui-egui --profile ci --tests -- -D warnings passed. These are host tests of the shared async workflow; Android system chooser behavior with an installed slicer is still not verified on-device.
+
+### Mesh export validation and complete catalogs (2026-10-30)
+
+- `save_job::tests` passed 2/2 and `dialogs_save_mesh::tests` passed 3/3, including the worker persistence, dirty-document, UI-frame, and completed-share-file checks. UI crate Clippy and `cargo fmt --all -- --check` passed.
+- The Android Gradle tasks `:app:testDebugUnitTest :app:assembleDebug` passed with the locally installed SDK. Gradle reported the Android unit-test task `UP-TO-DATE`; `assembleDebug` rebuilt the ARM64 and x86_64 Rust libraries and packaged both into debug APKs.
+- The workspace gate found the complete Japanese and Simplified Chinese catalogs missing the two new mesh-sharing strings. Added both translations; `cargo xtask lists --fix` reported sorted catalogs, and `i18n::tests::every_complete_catalog_carries_every_english_message` passed 1/1 afterward.
+- `cargo xtask ci` was not rerun to completion after this catalog fix. Its previous full run passed formatting, assets, icon checks, licenses, catalog ordering, layering, UI containers, workspace Clippy, test compilation, WASM, docs, and the other completed test binaries. The catalog failure above was fixed and verified separately; the remaining full local test run was stopped while a long kernel test was still active. GitHub PR CI remains the full post-push verification.

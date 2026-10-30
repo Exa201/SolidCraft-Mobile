@@ -388,35 +388,24 @@ fn mesh_mime(format: &str) -> &'static str {
 }
 
 fn save(app: &mut SolveApp, mut params: Value, path: &str, share_mime: Option<&str>) {
-    // Runs from the file picker's answer, outside the frame's language scope.
-    let _language = crate::i18n::scope(&app.preferences.language);
     params["path"] = json!(path);
-    let result = match app.run("file.save_mesh", params) {
-        Ok(result) => result,
-        Err(error) => {
-            app.set_status(error, true);
-            return;
-        }
-    };
-    if let Some(mime) = share_mime {
-        let Some(share) = app.services.share_mesh.as_ref() else {
-            app.set_status("Android mesh sharing is unavailable".to_string(), true);
-            return;
-        };
-        let result = share(path, mime);
-        match result {
-            Ok(()) => app.set_status(crate::i18n::tr("ui.android_choose_mesh_app").to_string(), false),
-            Err(error) => app.set_status(error, true),
-        }
-        return;
-    }
-    match result.get("slicer_error").and_then(Value::as_str) {
-        Some(e) => app.set_status(e.to_string(), true),
-        None => match result.get("slicer").and_then(Value::as_str) {
-            Some(s) => app.set_status(crate::i18n::format("ui.sent_to_slicer", &[("slicer", s)]), false),
-            None => app.set_status(crate::i18n::format("ui.saved_to", &[("path", path)]), false),
-        },
-    }
+    let after_export = share_mime.map(|mime| {
+        let path = path.to_owned();
+        let mime = mime.to_owned();
+        Box::new(move |app: &mut SolveApp, _result: &Value| {
+            let Some(share) = app.services.share_mesh.as_ref() else {
+                app.set_status("Android mesh sharing is unavailable".to_string(), true);
+                return;
+            };
+            match share(&path, &mime) {
+                Ok(()) => app.set_status(crate::i18n::tr("ui.android_choose_mesh_app").to_string(), false),
+                Err(error) => app.set_status(error, true),
+            }
+        }) as Box<dyn FnOnce(&mut SolveApp, &Value)>
+    });
+    // Mesh tessellation and serialization can be expensive on large designs. Run them on the
+    // shared save worker; Android opens the chooser only after the completed file is written.
+    crate::save_job::start_export(app, params, after_export);
 }
 
 #[cfg(test)]
@@ -446,5 +435,29 @@ mod tests {
         assert_eq!(mesh_mime("stl"), "model/stl");
         assert_eq!(mesh_mime("3mf"), "application/vnd.ms-3mfdocument");
         assert_eq!(mesh_mime("3mf-tagged"), "application/vnd.ms-3mfdocument");
+    }
+
+    #[test]
+    fn mesh_share_opens_only_after_the_background_export_is_complete() {
+        let mut h = crate::scenario::Harness::new();
+        h.app.run("solid.box", json!({"length": 10, "width": 10, "height": 10})).unwrap();
+        let path = h.dir.join("shared.stl");
+        let opened = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let opened_from_callback = opened.clone();
+        h.app.services.share_mesh = Some(Box::new(move |shared_path, mime| {
+            let file = std::path::Path::new(shared_path);
+            if !file.is_file() || file.metadata().map_err(|error| error.to_string())?.len() == 0 {
+                return Err("the export is not ready to share".into());
+            }
+            *opened_from_callback.lock().map_err(|error| error.to_string())? = Some((shared_path.to_owned(), mime.to_owned()));
+            Ok(())
+        }));
+
+        save(&mut h.app, json!({"format": "stl"}), &path.to_string_lossy(), Some("model/stl"));
+        assert!(h.app.saving.is_some(), "the export should leave the UI frame while it runs");
+        assert!(opened.lock().unwrap().is_none(), "the chooser must wait until export completion");
+        h.settle();
+
+        assert_eq!(opened.lock().unwrap().as_ref(), Some(&(path.to_string_lossy().into_owned(), "model/stl".to_owned())));
     }
 }
