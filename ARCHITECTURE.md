@@ -2,7 +2,7 @@
 
 ## Current state
 
-SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui interface in a native Android application. Kotlin is used for Android platform APIs and lifecycle integration; Rust remains the owner of CAD documents, commands, geometry, undo/recovery, and rendering. The Android application targets API 37, supports API 28 and later, and packages separate `arm64-v8a` and `x86_64` APKs. The available Android 16 x86_64 emulator currently fails during app startup, so that ABI has not been runtime-verified; see `TEST_REPORT.md`.
+SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui interface in a native Android application. Kotlin is used for Android platform APIs and lifecycle integration; Rust remains the owner of CAD documents, commands, geometry, undo/recovery, and rendering. The Android application targets API 37, supports API 28 and later, and packages separate `arm64-v8a` and `x86_64` APKs. The x86_64 Android build selects GLES to avoid the API 36 emulator's crashing gfxstream Vulkan path; a local API 36 x86_64 run rendered the UI and passed lifecycle instrumentation. Exact-commit CI and Xiaomi/physical ARM64 verification remain separate; see `TEST_REPORT.md`.
 
 ```text
 Android Activity (Kotlin / GameActivity)
@@ -42,7 +42,7 @@ Camera navigation lives in `crates/ui-egui/src/navigation.rs`. The shared event 
 
 Host integration tests exercise egui touch events through camera navigation and viewport selection. The complete egui crate suite has passed on the current working tree before the final full-workspace CI run. Small-target accuracy and gesture arbitration have not yet been verified on an Android device. Physical keyboard, mouse and stylus behavior also need device-level coverage.
 
-The Rust UI is rendered through eframe/wgpu on GameActivity. Android startup passes eframe's wgpu render state to `SolveApp::set_wgpu` and installs the shared picture renderer; omitting this setup left the viewport blank even though CAD commands completed. The API 36 emulator now verifies visible shaded geometry after creating a box. Android lifecycle callbacks and eframe persistence are wired, and the app has launched on an API 36 emulator and a physical Android 16 device. Pause/resume, rotation, surface recreation, GPU context loss, forced-crash recovery, and memory-pressure behavior are not yet fully tested on Android.
+The Rust UI is rendered through eframe/wgpu on GameActivity. Android startup passes eframe's wgpu render state to `SolveApp::set_wgpu` and installs the shared picture renderer; omitting this setup left the viewport blank even though CAD commands completed. x86_64 Android builds use GLES because the API 36 emulator's gfxstream Vulkan implementation reproducibly crashes in `vkQueueSubmit`; ARM64 retains wgpu's normal Vulkan-first selection. A local API 36 x86_64 APK displayed the model workspace and opened the Create Sketch dialog after touch input. GLES lacks the independent blending used by weighted order-independent transparency, so transparent surfaces use the existing sorted fallback. Android lifecycle callbacks and eframe persistence are wired, and the app has launched on an API 36 emulator and a physical Android 16 device. Pause/resume, surface recreation, GPU context loss, forced-crash recovery, and memory-pressure behavior are not yet fully tested on Android.
 
 ## Responsive presentation
 

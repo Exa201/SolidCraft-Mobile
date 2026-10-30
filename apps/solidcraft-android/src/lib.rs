@@ -50,6 +50,17 @@ fn android_main(app: AndroidApp) {
     let persistence_path = data_directory.as_ref().map(|directory| directory.join("solidcraft-mobile.ron"));
     let recovery_directory = data_directory.map(|directory| directory.join("recovery"));
     let options = eframe::NativeOptions { android_app: Some(app), persistence_path, depth_buffer: 24, stencil_buffer: 8, ..Default::default() };
+    // The x86_64 Android emulator's Vulkan (gfxstream) driver crashes in vkQueueSubmit on
+    // API 36. Keep emulator APKs usable by using GLES there. ARM64 phones retain wgpu's
+    // normal Vulkan-first selection, which avoids imposing the emulator workaround on devices.
+    #[cfg(target_arch = "x86_64")]
+    let options = {
+        let mut options = options;
+        if let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut options.wgpu_options.wgpu_setup {
+            setup.instance_descriptor.backends = eframe::wgpu::Backends::GL;
+        }
+        options
+    };
     let result = eframe::run_native(
         "SolidCraft",
         options,
