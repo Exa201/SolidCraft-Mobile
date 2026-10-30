@@ -302,7 +302,7 @@ Diese Inventur wird aus [`docs/features.md`](docs/features.md) abgeleitet, dem v
 | Inspect | Section Analysis | `inspect.section` | `crates/engine/src/cmd/section.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Inspect | Silhouette | `inspect.silhouette` | `crates/engine/src/cmd/silhouette.rs` | Gemeinsam vorhanden, mobil ungeprüft |
 | Inspect | Zebra Analysis | `inspect.zebra` | `crates/engine/src/cmd/surface_analysis.rs` | Gemeinsam vorhanden, mobil ungeprüft |
-| Files | Export | `file.export` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Exportpfad auf Android ungeprüft |
+| Files | Export | `file.export` | `crates/engine/src/cmd/file.rs` | Export aus Save-Picker und Toolbar nutzt Hintergrund-Worker; Host-Integrationstest simuliert blockierten SAF-Provider, prüft fortlaufenden UI-Frame und erhält Dirty-Zustand. Android-Gerätepfad noch nicht verifiziert |
 | Files | Export Current View as DXF | `file.export_view_dxf` | `crates/engine/src/cmd/view_dxf.rs` | API-36-Emulator: DXF asynchron erzeugt und über SAF zurückgeschrieben; Datei 19.265 Byte, Header AC1015 verifiziert |
 | Files | Insert Mesh | `file.insert_mesh` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Importpfad auf Android ungeprüft |
 | Files | Insert STEP | `file.insert_step` | `crates/engine/src/cmd/file.rs` | SAF-Brücke implementiert, Importpfad auf Android ungeprüft |

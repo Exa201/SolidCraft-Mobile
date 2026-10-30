@@ -110,11 +110,15 @@ impl SolveApp {
             if let Some(path) = path {
                 let mut params = params;
                 params["path"] = json!(path);
-                let result = app.run(&command, params);
-                if command == "parameters.export"
-                    && let Some(dialog) = app.params.as_mut()
-                {
-                    dialog.error = result.err();
+                if command == "file.export" {
+                    crate::save_job::start_export(app, "file.export", params, None);
+                } else {
+                    let result = app.run(&command, params);
+                    if command == "parameters.export"
+                        && let Some(dialog) = app.params.as_mut()
+                    {
+                        dialog.error = result.err();
+                    }
                 }
             }
         });
@@ -245,6 +249,46 @@ mod tests {
         finish(&mut h.app, &answer, Some(path.to_string_lossy().into_owned()));
         assert!(path.is_file() && !h.app.session.is_dirty());
         assert_eq!(h.app.session.path.as_deref(), path.to_str());
+    }
+
+    #[test]
+    fn cad_export_picker_writes_back_on_a_worker_and_keeps_the_design_dirty() {
+        let mut h = crate::scenario::Harness::new();
+        h.app.run("solid.box", json!({"length":10,"width":10,"height":10})).unwrap();
+        assert!(h.app.session.is_dirty());
+        let answer = picker(&mut h.app, true);
+        let path = h.dir.join("chosen.step");
+        let caller_thread = std::thread::current().id();
+        let (provider_started_tx, provider_started_rx) = std::sync::mpsc::channel();
+        let (release_provider_tx, release_provider_rx) = std::sync::mpsc::channel();
+        let provider_release = std::sync::Mutex::new(release_provider_rx);
+        let persisted_on = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let persisted_on_worker = persisted_on.clone();
+        h.app.services.persist_document_save = Some(std::sync::Arc::new(move |_| {
+            provider_started_tx.send(()).map_err(|error| error.to_string())?;
+            provider_release.lock().map_err(|error| error.to_string())?.recv().map_err(|error| error.to_string())?;
+            *persisted_on_worker.lock().map_err(|error| error.to_string())? = Some(std::thread::current().id());
+            Ok(())
+        }));
+        h.app.pick_save_command("chosen.step", &["step"], "file.export", json!({}));
+        *answer.path.borrow_mut() = Some(Some(path.to_string_lossy().into_owned()));
+        if let Some(waker) = answer.waker.borrow_mut().take() {
+            waker.wake();
+        }
+        tick(&mut h.app, &h.ctx);
+        provider_started_rx.recv_timeout(std::time::Duration::from_secs(2)).expect("SAF export write-back starts on the worker");
+
+        h.frame();
+        assert!(h.app.saving.is_some(), "the app must keep drawing while SAF export is pending");
+        assert!(h.app.session.is_dirty(), "exporting must not mark the CAD design saved");
+        release_provider_tx.send(()).expect("release the simulated provider");
+        crate::save_job::tick(&mut h.app, true);
+
+        assert!(!h.app.file_picker_busy());
+        assert!(path.is_file() && std::fs::metadata(&path).unwrap().len() > 0);
+        assert!(h.app.session.is_dirty());
+        assert_ne!(persisted_on.lock().unwrap().as_ref(), Some(&caller_thread));
+        assert!(h.app.status.as_ref().is_some_and(|(message, _, error)| !error && message.contains("chosen.step")));
     }
 
     #[test]

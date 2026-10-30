@@ -389,10 +389,12 @@ fn mesh_mime(format: &str) -> &'static str {
 
 fn save(app: &mut SolveApp, mut params: Value, path: &str, share_mime: Option<&str>) {
     params["path"] = json!(path);
-    let after_export = share_mime.map(|mime| {
-        let path = path.to_owned();
-        let mime = mime.to_owned();
-        Box::new(move |app: &mut SolveApp, _result: &Value| {
+    let path = path.to_owned();
+    let mime = share_mime.map(str::to_owned);
+    let language = app.preferences.language.clone();
+    let after_export = Some(Box::new(move |app: &mut SolveApp, result: &Value| {
+        let _language = crate::i18n::scope(&language);
+        if let Some(mime) = mime {
             let Some(share) = app.services.share_mesh.as_ref() else {
                 app.set_status("Android mesh sharing is unavailable".to_string(), true);
                 return;
@@ -401,11 +403,19 @@ fn save(app: &mut SolveApp, mut params: Value, path: &str, share_mime: Option<&s
                 Ok(()) => app.set_status(crate::i18n::tr("ui.android_choose_mesh_app").to_string(), false),
                 Err(error) => app.set_status(error, true),
             }
-        }) as Box<dyn FnOnce(&mut SolveApp, &Value)>
-    });
+            return;
+        }
+        if let Some(error) = result.get("slicer_error").and_then(Value::as_str) {
+            app.set_status(error.to_owned(), true);
+        } else if let Some(slicer) = result.get("slicer").and_then(Value::as_str) {
+            app.set_status(crate::i18n::format("ui.sent_to_slicer", &[("slicer", slicer)]), false);
+        } else {
+            app.set_status(crate::i18n::format("ui.saved_to", &[("path", &path)]), false);
+        }
+    }) as Box<dyn FnOnce(&mut SolveApp, &Value)>);
     // Mesh tessellation and serialization can be expensive on large designs. Run them on the
     // shared save worker; Android opens the chooser only after the completed file is written.
-    crate::save_job::start_export(app, params, after_export);
+    crate::save_job::start_export(app, "file.save_mesh", params, after_export);
 }
 
 #[cfg(test)]

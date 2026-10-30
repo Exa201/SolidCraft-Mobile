@@ -4,7 +4,7 @@ use crate::fonts::RichTextExt as _;
 use crate::icons::glyphs::pin_icon;
 use crate::ui_kit::{Container, Edge, Surface};
 use egui::{Align2, Color32, FontId, Rect, Sense, Stroke, pos2, vec2};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::theme::Tokens;
 use crate::{SolveApp, icons};
@@ -726,9 +726,12 @@ fn export_as(app: &mut SolveApp, ext: &str, format: Option<&str>) {
         if let Some(format) = format {
             params["format"] = json!(format);
         }
-        if app.run("file.export", params).is_ok() {
+        let language = app.preferences.language.clone();
+        let on_success = Some(Box::new(move |app: &mut SolveApp, _result: &Value| {
+            let _language = crate::i18n::scope(&language);
             app.set_status(format!("Exported {path}"), false);
-        }
+        }) as Box<dyn FnOnce(&mut SolveApp, &Value)>);
+        crate::save_job::start_export(app, "file.export", params, on_success);
     });
 }
 
