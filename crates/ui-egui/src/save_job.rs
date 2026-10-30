@@ -96,11 +96,27 @@ mod tests {
         let mut h = crate::scenario::Harness::new();
         h.app.run("solid.box", json!({"length": 10, "width": 10, "height": 10})).unwrap();
         let path = h.dir.join("Plate.solidcraft");
+        let caller_thread = std::thread::current().id();
+        let (provider_started_tx, provider_started_rx) = std::sync::mpsc::channel();
+        let (release_provider_tx, release_provider_rx) = std::sync::mpsc::channel();
+        let provider_release = std::sync::Mutex::new(release_provider_rx);
+        let persisted_on = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let persisted_on_worker = persisted_on.clone();
+        h.app.services.persist_document_save = Some(std::sync::Arc::new(move |_| {
+            provider_started_tx.send(()).map_err(|error| error.to_string())?;
+            provider_release.lock().map_err(|error| error.to_string())?.recv().map_err(|error| error.to_string())?;
+            *persisted_on_worker.lock().map_err(|error| error.to_string())? = Some(std::thread::current().id());
+            Ok(())
+        }));
         assert!(super::start(&mut h.app, "file.save_as", json!({"path": path.to_string_lossy()})), "under way on a worker");
         assert!(h.app.file_picker_busy() && h.app.run("solid.sphere", json!({"diameter": 4})).is_err(), "the design waits for it");
+        provider_started_rx.recv_timeout(std::time::Duration::from_secs(2)).expect("provider persistence starts on the save worker");
         h.frame();
+        assert!(h.app.saving.is_some(), "a slow Android document provider must not block the UI frame");
+        release_provider_tx.send(()).expect("release the simulated provider");
         h.settle();
         assert!(h.app.saving.is_none() && !h.app.session.is_dirty());
+        assert_ne!(persisted_on.lock().unwrap().as_ref(), Some(&caller_thread), "provider write-back must not run on the window thread");
         assert_eq!(h.app.session.path.as_deref(), path.to_str());
         assert_eq!(h.app.session.doc.name, "Plate");
         assert!(h.app.home.recent.iter().any(|r| r.as_str() == path.to_str().unwrap()), "{:?}", h.app.home.recent);

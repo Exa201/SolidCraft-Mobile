@@ -330,36 +330,6 @@ pub fn button(k: &SaveMesh) -> &'static str {
     if k.send { "Send" } else { "Save" }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::selection::BODIES;
-    use solidcraft_engine::Sel;
-
-    #[test]
-    fn android_share_mesh_command_exports_selected_bodies_without_a_desktop_slicer() {
-        let mut bodies = SelInput::new("Bodies", BODIES, true);
-        bodies.items.push(Sel::Body { name: "Block".into() });
-        let dialog = SaveMesh { format: 1, send: true, share_mesh: true, slicer: String::new(), stale: false };
-
-        let commands = commands(&dialog, &[bodies]);
-        assert!(commands.is_ok(), "selected body should be exportable: {commands:?}");
-        let commands = commands.unwrap_or_default();
-        assert_eq!(commands.len(), 1);
-        assert_eq!(commands[0].0, "file.save_mesh");
-        assert_eq!(commands[0].1["format"], "3mf");
-        assert_eq!(commands[0].1["bodies"], json!(["Block"]));
-        assert!(commands[0].1.get("slicer").is_none(), "Android hands the staged file to the system chooser");
-    }
-
-    #[test]
-    fn android_share_uses_mesh_mime_types() {
-        assert_eq!(mesh_mime("stl"), "model/stl");
-        assert_eq!(mesh_mime("3mf"), "application/vnd.ms-3mfdocument");
-        assert_eq!(mesh_mime("3mf-tagged"), "application/vnd.ms-3mfdocument");
-    }
-}
-
 /// Save asks for a file name. Send writes to a temporary file and opens the host's slicer or app
 /// chooser without a file dialog.
 pub fn run(app: &mut SolveApp, k: &SaveMesh, inputs: &[SelInput]) -> Result<(), String> {
@@ -446,5 +416,35 @@ fn save(app: &mut SolveApp, mut params: Value, path: &str, share_mime: Option<&s
             Some(s) => app.set_status(crate::i18n::format("ui.sent_to_slicer", &[("slicer", s)]), false),
             None => app.set_status(crate::i18n::format("ui.saved_to", &[("path", path)]), false),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::selection::BODIES;
+    use solidcraft_engine::Sel;
+
+    #[test]
+    fn android_share_mesh_command_exports_selected_bodies_without_a_desktop_slicer() {
+        let mut bodies = SelInput::new("Bodies", BODIES, true);
+        bodies.items.push(Sel::Body { name: "Block".into() });
+        let dialog = SaveMesh { format: 1, send: true, share_mesh: true, slicer: String::new(), stale: false };
+
+        let commands = commands(&dialog, &[bodies]);
+        assert!(commands.is_ok(), "selected body should be exportable: {commands:?}");
+        let commands = commands.unwrap_or_default();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].0, "file.save_mesh");
+        assert_eq!(commands[0].1["format"], "3mf");
+        assert_eq!(commands[0].1["bodies"], json!(["Block"]));
+        assert!(commands[0].1.get("slicer").is_none(), "Android hands the staged file to the system chooser");
+    }
+
+    #[test]
+    fn android_share_uses_mesh_mime_types() {
+        assert_eq!(mesh_mime("stl"), "model/stl");
+        assert_eq!(mesh_mime("3mf"), "application/vnd.ms-3mfdocument");
+        assert_eq!(mesh_mime("3mf-tagged"), "application/vnd.ms-3mfdocument");
     }
 }
