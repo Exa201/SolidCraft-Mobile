@@ -2,7 +2,7 @@
 
 ## Android GLES redraw follow-up (2026-10-31)
 
-Built the Android app for `arm64-v8a` and `x86_64` after a diagnostic change set the SolidCraft viewport to one sample on the x86_64/GLES emulator path (ARM64 retained the adapter value). Installed the x86_64 debug APK on API-36 AVD `emulator-5554`; the app launched and rendered the initial viewport. Opened the 500-byte `BoxTest-no-cache.solidcraft` through DocumentsUI and confirmed the Browser showed one body and the box rendered. Tapping File then reproduced a black surface with repeated `GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` (`0x8d56`) and `GL error 0x506`. Thus a viewport-only single-sample setting does not fix the failure and was reverted. The failure remains a release limitation for x86_64 GLES emulators; no conclusion is drawn for ARM64 phones.
+Built the Android app for `arm64-v8a` and `x86_64` with diagnostic variants. On API-36 AVD `emulator-5554`, opening the 500-byte `BoxTest-no-cache.solidcraft` through DocumentsUI showed one body and a box while the `Loading parts 1/1` toast was active; after about 15 seconds without any further touch input, the screen became fully black. Logcat showed repeated depth-attachment `GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` (`0x8d56`) and `GL error 0x506`. The same timed failure reproduced with the x86_64 viewport forced to one sample, with GPU tessellation disabled in favor of CPU tessellation, and with the x86_64 depth target changed to `Depth16Unorm` without stencil. All diagnostic source changes were reverted. This narrows the failure to rendering the fully meshed model on the API-36 x86_64 GLES path, but does not identify a fix; no conclusion is drawn for ARM64 phones.
 
 ## Environment and evidence
 
