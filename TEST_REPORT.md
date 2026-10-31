@@ -420,3 +420,5 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - Save As now stages the filename reported by the selected document provider, so the engine path and Open Recent label match the actual provider document name. Empty or unsafe provider names fall back to the picker suggestion and are sanitized before use as an app-private path.
 - Provider display-name metadata is optional: a query exception, missing column, or empty cursor now falls back instead of aborting an otherwise readable document open.
 - `:app:testDebugUnitTest --tests org.solidcraft.mobile.DocumentStagingTest -x :app:buildRustAndroid --no-daemon` passed 6/6 tests; `git diff --check` passed. This tests the filename resolver on the JVM; provider query failure is handled by the Android host path but was not separately instrumented on a device.
+
+- Additional filename-safety regression: provider names `.` and `..` are rejected in favor of the picker suggestion, preventing those path components from addressing the workspace directory itself. The focused `DocumentStagingTest` suite passed again after this guard.

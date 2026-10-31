@@ -14,6 +14,7 @@ class DocumentStagingTest {
     fun saveAsUsesSanitizedProviderNameAndFallsBackToPickerName() {
         assertEquals("Bracket revised.step", DocumentStaging.safeDocumentName("Projects/Bracket: revised.step", "suggested.solidcraft"))
         assertEquals("suggested.solidcraft", DocumentStaging.safeDocumentName("  ", "suggested.solidcraft"))
+        assertEquals("suggested.solidcraft", DocumentStaging.safeDocumentName("..", "suggested.solidcraft"))
         assertEquals("document", DocumentStaging.safeDocumentName("/\\:*?", ""))
     }
 

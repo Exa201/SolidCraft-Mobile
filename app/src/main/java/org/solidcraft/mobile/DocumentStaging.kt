@@ -17,7 +17,9 @@ internal object DocumentStaging {
             .filter { it.isLetterOrDigit() || it in "._- ()" }
             .take(160)
 
-        return sanitize(providerName.orEmpty()).ifBlank { sanitize(fallbackName) }.ifBlank { "document" }
+        fun usableName(name: String): String = sanitize(name).takeUnless { it == "." || it == ".." }.orEmpty()
+
+        return usableName(providerName.orEmpty()).ifBlank { usableName(fallbackName) }.ifBlank { "document" }
     }
 
     fun replaceFrom(input: InputStream, target: File, maxBytes: Long? = null) = input.use { source ->
