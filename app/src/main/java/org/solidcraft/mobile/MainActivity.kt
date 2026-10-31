@@ -3,7 +3,6 @@ package org.solidcraft.mobile
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -89,10 +88,7 @@ class MainActivity : GameActivity() {
             // turn a recent document into a missing file.
             val directory = File(filesDir, "solidcraft-documents")
             check(directory.isDirectory || directory.mkdirs()) { "Could not create the CAD document workspace" }
-            val displayName = if (request.save) request.name else queryDisplayName(uri) ?: request.name
-            val safeName = displayName.substringAfterLast('/').substringAfterLast('\\')
-                .filter { it.isLetterOrDigit() || it in "._- ()" }
-                .take(160).ifBlank { "document" }
+            val safeName = DocumentStaging.safeDocumentName(queryDisplayName(uri), request.name)
             val uriKey = MessageDigest.getInstance("SHA-256")
                 .digest(uri.toString().toByteArray(Charsets.UTF_8))
                 .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
@@ -186,12 +182,15 @@ class MainActivity : GameActivity() {
     }
 
     private fun queryDisplayName(uri: Uri): String? {
-        var cursor: Cursor? = null
         return try {
-            cursor = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            if (cursor?.moveToFirst() == true) cursor.getString(0) else null
-        } finally {
-            cursor?.close()
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+            }
+        } catch (_: Exception) {
+            // Display-name metadata is optional. A provider that cannot answer queries may still
+            // grant stream access, so keep opening the document using the picker name as fallback.
+            null
         }
     }
 

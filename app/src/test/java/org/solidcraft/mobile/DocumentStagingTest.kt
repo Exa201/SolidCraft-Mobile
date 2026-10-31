@@ -11,6 +11,13 @@ import java.nio.file.Files
 
 class DocumentStagingTest {
     @Test
+    fun saveAsUsesSanitizedProviderNameAndFallsBackToPickerName() {
+        assertEquals("Bracket revised.step", DocumentStaging.safeDocumentName("Projects/Bracket: revised.step", "suggested.solidcraft"))
+        assertEquals("suggested.solidcraft", DocumentStaging.safeDocumentName("  ", "suggested.solidcraft"))
+        assertEquals("document", DocumentStaging.safeDocumentName("/\\:*?", ""))
+    }
+
+    @Test
     fun completeReadAtomicallyReplacesAnExistingWorkingCopy() = withWorkspace { directory ->
         val target = File(directory, "part.solidcraft").apply { writeText("old complete model") }
 

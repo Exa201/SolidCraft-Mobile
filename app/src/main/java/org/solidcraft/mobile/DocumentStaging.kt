@@ -11,6 +11,15 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 internal object DocumentStaging {
     private const val BUFFER_SIZE = 64 * 1024
 
+    /** Prefer the name reported for the selected URI, but keep picker names safe for local paths. */
+    fun safeDocumentName(providerName: String?, fallbackName: String): String {
+        fun sanitize(name: String): String = name.substringAfterLast('/').substringAfterLast('\\')
+            .filter { it.isLetterOrDigit() || it in "._- ()" }
+            .take(160)
+
+        return sanitize(providerName.orEmpty()).ifBlank { sanitize(fallbackName) }.ifBlank { "document" }
+    }
+
     fun replaceFrom(input: InputStream, target: File, maxBytes: Long? = null) = input.use { source ->
         require(maxBytes == null || maxBytes >= 0) { "The document size limit is invalid" }
         val parent = requireNotNull(target.absoluteFile.parentFile) { "The document workspace has no parent directory" }

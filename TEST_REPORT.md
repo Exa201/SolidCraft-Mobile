@@ -414,3 +414,9 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - Added `navigation::tests::two_finger_pinch_and_twist_change_only_the_camera`, which applies egui multitouch input to the shared camera path. It verifies a 1.5× spread reduces camera distance, a two-finger twist changes camera orientation, and neither gesture modifies the CAD design.
 - `cargo fmt --all -- --check` passed. `cargo test -j 1 -p solidcraft-ui-egui --lib two_finger_pinch_and_twist_change_only_the_camera` passed 1/1 (1,878 filtered out).
 - This is host-side behavior coverage. No physical-device gesture run was performed in this turn.
+
+### SAF provider display-name handling (2026-10-31)
+
+- Save As now stages the filename reported by the selected document provider, so the engine path and Open Recent label match the actual provider document name. Empty or unsafe provider names fall back to the picker suggestion and are sanitized before use as an app-private path.
+- Provider display-name metadata is optional: a query exception, missing column, or empty cursor now falls back instead of aborting an otherwise readable document open.
+- `:app:testDebugUnitTest --tests org.solidcraft.mobile.DocumentStagingTest -x :app:buildRustAndroid --no-daemon` passed 6/6 tests; `git diff --check` passed. This tests the filename resolver on the JVM; provider query failure is handled by the Android host path but was not separately instrumented on a device.
