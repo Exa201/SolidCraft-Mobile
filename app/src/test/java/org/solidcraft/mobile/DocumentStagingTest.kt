@@ -11,6 +11,16 @@ import java.nio.file.Files
 
 class DocumentStagingTest {
     @Test
+    fun preparingSaveAsKeepsPreviousWorkingCopyUntilAtomicSave() = withWorkspace { directory ->
+        val existing = File(directory, "part.solidcraft").apply { writeText("last complete design") }
+
+        val target = DocumentStaging.saveTarget(directory, existing.name)
+
+        assertEquals(existing, target)
+        assertEquals("last complete design", target.readText())
+    }
+
+    @Test
     fun saveAsUsesSanitizedProviderNameAndFallsBackToPickerName() {
         assertEquals("Bracket revised.step", DocumentStaging.safeDocumentName("Projects/Bracket: revised.step", "suggested.solidcraft"))
         assertEquals("suggested.solidcraft", DocumentStaging.safeDocumentName("  ", "suggested.solidcraft"))

@@ -422,3 +422,9 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - `:app:testDebugUnitTest --tests org.solidcraft.mobile.DocumentStagingTest -x :app:buildRustAndroid --no-daemon` passed 6/6 tests; `git diff --check` passed. This tests the filename resolver on the JVM; provider query failure is handled by the Android host path but was not separately instrumented on a device.
 
 - Additional filename-safety regression: provider names `.` and `..` are rejected in favor of the picker suggestion, preventing those path components from addressing the workspace directory itself. The focused `DocumentStagingTest` suite passed again after this guard.
+
+### SAF Save As working-copy preservation (2026-10-31)
+
+- Selecting a Save As target no longer deletes an existing staged copy before the engine writes. The engine uses an atomic replacement; if serialization or disk writing fails, the previous working copy and Recent path stay readable while the provider destination remains untouched.
+- Added a staging regression test that confirms selecting an existing save target preserves its last complete contents until replacement.
+- Full `:app:testDebugUnitTest -x :app:buildRustAndroid --no-daemon` run passed: 45 tests, 0 failures, 0 errors, 0 skipped. `git diff --check` passed.

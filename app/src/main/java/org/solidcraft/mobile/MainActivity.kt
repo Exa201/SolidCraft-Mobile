@@ -94,10 +94,11 @@ class MainActivity : GameActivity() {
                 .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
             val uriDirectory = File(directory, uriKey)
             check(uriDirectory.isDirectory || uriDirectory.mkdirs()) { "Could not create the document workspace" }
-            val staged = File(uriDirectory, safeName)
+            val staged = DocumentStaging.saveTarget(uriDirectory, safeName)
 
             if (request.save) {
-                staged.delete()
+                // Keep a previous working copy: file.save_as writes atomically and can fail before
+                // replacing it, while the provider destination is untouched until write-back.
                 val mapping = JSONObject().put("uri", uri.toString())
                     .put("writable", allowed and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
                 documentPreferences().edit().putString(staged.absolutePath, mapping.toString()).apply()

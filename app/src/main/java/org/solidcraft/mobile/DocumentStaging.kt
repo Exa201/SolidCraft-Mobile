@@ -22,6 +22,12 @@ internal object DocumentStaging {
         return usableName(providerName.orEmpty()).ifBlank { usableName(fallbackName) }.ifBlank { "document" }
     }
 
+    /** Keep any existing working copy until the engine's atomic save successfully replaces it. */
+    fun saveTarget(directory: File, name: String): File {
+        check(directory.isDirectory || directory.mkdirs()) { "Could not create the document workspace" }
+        return File(directory, name)
+    }
+
     fun replaceFrom(input: InputStream, target: File, maxBytes: Long? = null) = input.use { source ->
         require(maxBytes == null || maxBytes >= 0) { "The document size limit is invalid" }
         val parent = requireNotNull(target.absoluteFile.parentFile) { "The document workspace has no parent directory" }
