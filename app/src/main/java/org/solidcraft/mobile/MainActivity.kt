@@ -52,12 +52,7 @@ class MainActivity : GameActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != DOCUMENT_REQUEST_CODE && requestCode != RESOURCE_FOLDER_REQUEST_CODE) return
-        val request = synchronized(requestLock) {
-            val current = activeRequest
-            activeRequest = null
-            current
-        } ?: return
+        val request = activeRequest.takeForResult(requestCode) ?: return
 
         if (!documentResults.isPending(request.id)) return
 
@@ -67,7 +62,7 @@ class MainActivity : GameActivity() {
         }
 
         val uri = data.data!!
-        if (requestCode == RESOURCE_FOLDER_REQUEST_CODE) {
+        if (request.kind == DocumentPickerKind.GLTF_RESOURCE_FOLDER) {
             Thread({ finishResourceFolderSelection(request, uri, data.flags) }, "solidcraft-gltf-resources").start()
         } else {
             Thread({ finishDocumentSelection(request, uri, data.flags) }, "solidcraft-document-picker").start()
@@ -131,13 +126,14 @@ class MainActivity : GameActivity() {
     private fun requestResourceFolder(request: DocumentRequest, staged: File, paths: List<String>) {
         runOnUiThread {
             if (!documentResults.isPending(request.id)) return@runOnUiThread
-            val pending = request.copy(stagedPath = staged.absolutePath, resourcePaths = paths)
-            synchronized(requestLock) {
-                if (activeRequest != null) {
-                    documentResults.complete(request.id, "")
-                    return@runOnUiThread
-                }
-                activeRequest = pending
+            val pending = request.copy(
+                stagedPath = staged.absolutePath,
+                resourcePaths = paths,
+                kind = DocumentPickerKind.GLTF_RESOURCE_FOLDER,
+            )
+            if (!activeRequest.begin(pending)) {
+                documentResults.complete(request.id, "")
+                return@runOnUiThread
             }
             Toast.makeText(
                 this,
@@ -147,11 +143,9 @@ class MainActivity : GameActivity() {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             try {
-                startActivityForResult(intent, RESOURCE_FOLDER_REQUEST_CODE)
+                startActivityForResult(intent, pending.kind.requestCode)
             } catch (error: Exception) {
-                synchronized(requestLock) {
-                    if (activeRequest?.id == request.id) activeRequest = null
-                }
+                activeRequest.clearIf { it.id == request.id }
                 documentResults.complete(request.id, "")
                 Toast.makeText(this, "SolidCraft: ${error.message ?: "No folder picker is available"}", Toast.LENGTH_LONG).show()
             }
@@ -202,13 +196,10 @@ class MainActivity : GameActivity() {
     private fun documentPreferences() = getSharedPreferences("solidcraft_documents", MODE_PRIVATE)
 
     companion object {
-        private const val DOCUMENT_REQUEST_CODE = 7321
-        private const val RESOURCE_FOLDER_REQUEST_CODE = 7322
         private const val MAX_GLTF_BUFFER_BYTES = 1L shl 30
         private const val SHARE_CACHE_RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000
         private val documentResults = DocumentRequestResults()
-        private val requestLock = Any()
-        private var activeRequest: DocumentRequest? = null
+        private val activeRequest = DocumentPickerRequestSlot<DocumentRequest> { it.kind }
         @Volatile private var activeActivity: WeakReference<MainActivity>? = null
 
         private data class DocumentRequest(
@@ -216,6 +207,7 @@ class MainActivity : GameActivity() {
             val save: Boolean,
             val name: String,
             val extensions: Array<String>,
+            val kind: DocumentPickerKind = DocumentPickerKind.CAD_DOCUMENT,
             val stagedPath: String? = null,
             val resourcePaths: List<String> = emptyList(),
         )
@@ -231,15 +223,12 @@ class MainActivity : GameActivity() {
             }
             val request = DocumentRequest(id, save, name, extensions)
             activity.runOnUiThread {
-                synchronized(requestLock) {
-                    // The Rust picker future may have been dropped while this UI-thread task was
-                    // queued. Do not launch a picker for a request that no longer has a consumer.
-                    if (!documentResults.isPending(id)) return@runOnUiThread
-                    if (activeRequest != null) {
-                        documentResults.complete(id, "")
-                        return@runOnUiThread
-                    }
-                    activeRequest = request
+                // The Rust picker future may have been dropped while this UI-thread task was
+                // queued. Do not launch a picker for a request that no longer has a consumer.
+                if (!documentResults.isPending(id)) return@runOnUiThread
+                if (!activeRequest.begin(request)) {
+                    documentResults.complete(id, "")
+                    return@runOnUiThread
                 }
 
                 val intent = if (save) Intent(Intent.ACTION_CREATE_DOCUMENT) else Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -256,11 +245,9 @@ class MainActivity : GameActivity() {
                     CadDocumentTypes.openMimeTypes(extensions)?.let { intent.putExtra(Intent.EXTRA_MIME_TYPES, it) }
                 }
                 try {
-                    activity.startActivityForResult(intent, DOCUMENT_REQUEST_CODE)
+                    activity.startActivityForResult(intent, request.kind.requestCode)
                 } catch (error: Exception) {
-                    synchronized(requestLock) {
-                        if (activeRequest?.id == id) activeRequest = null
-                    }
+                    activeRequest.clearIf { it.id == id }
                     documentResults.complete(id, "")
                     Toast.makeText(activity, "SolidCraft: ${error.message ?: "No document picker is available"}", Toast.LENGTH_LONG).show()
                 }

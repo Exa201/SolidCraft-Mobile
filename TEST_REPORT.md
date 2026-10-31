@@ -367,3 +367,11 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - `adb devices -l` showed only API 35 and API 36 x86_64 AVDs; no Xiaomi or physical ARM64 Android device is attached.
 - The local Android SDK has an Android 16 Google APIs `arm64-v8a` AVD (`orkan-arm64-api36`). Starting it with `android emulator start --cold orkan-arm64-api36` exits before boot because this QEMU2 emulator runs on an x86_64 host and reports ARM64 system images unsupported on this host architecture. This did not modify the OrkanSlicer repository or application.
 - Therefore Preview 6's ARM64 APK Vulkan rendering and nonempty-model SAF open behavior cannot be verified on this host. The API 36 x86_64 GLES failure documented above must not be generalized to Xiaomi/ARM64; an actual ARM64 device trial is still needed.
+
+### SAF picker-result routing guard (2026-10-31)
+
+- Added explicit request kinds for the CAD document picker and the follow-up glTF resource-folder picker. The active request slot now consumes a result only when its request code matches that stage; a stale/mismatched result leaves the legitimate request active. Request-specific cleanup cannot clear a different active request.
+- Fresh `:app:testDebugUnitTest --rerun-tasks -x :app:buildRustAndroid`: 43 tests passed, 0 failures/errors/skips, including late-result routing and request cleanup cases.
+- `:app:connectedDebugAndroidTest -x :app:buildRustAndroid`: 2/2 tests passed on API 35 (`nightly35x64`) and 2/2 on API 36 (`solidcraft_android_test_fresh`), 0 failures/errors/skips on either emulator.
+- Built and installed the updated x86_64 debug APK on API 35, then used File → Open and Android DocumentsUI to open a nonempty `.solidcraft` document from Downloads. The app reported “Open done”, showed 1 body and a shaded solid, and remained top-resumed; the sampled logs had no fatal exception or Rust panic. This verifies the ordinary CAD-picker branch after the change, not a complete external-glTF folder round trip or Xiaomi/ARM64 behavior.
+- The API-36 x86_64 nonempty-model GLES rendering issue remains reproducible separately. This Kotlin picker guard does not claim to fix that emulator renderer issue.
