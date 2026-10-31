@@ -2,6 +2,15 @@
 
 SolidCraft Mobile is an early Android development preview of the shared SolidCraft Rust CAD engine and egui interface. It is intended for hands-on testing and feedback, not as a feature-complete or production-signed CAD release.
 
+## v0.1.0 Android Preview 10
+
+- Published as [GitHub prerelease `v0.1.0-android-preview.10`](https://github.com/Exa201/SolidCraft-Mobile/releases/tag/v0.1.0-android-preview.10) from source commit `233af14f2ab8bd2954ac9c0d5724eab1a28dfa79`.
+- Android APK workflow [41241432049](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41241432049) passed Kotlin/JVM tests, ARM64 and x86_64 Rust builds, APK ABI/package verification, signature verification, and artifact upload. Docker workflow [41241432023](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41241432023) and packaging lint passed. A forced local rerun passed 48 Android JVM tests (0 failures/errors/skips).
+- Includes the SAF mapping durability fix: Open and Save As synchronously persist the provider URI-to-working-copy mapping before the native engine receives the staged path.
+- Includes debug-signed APKs for arm64-v8a (92,998,719 bytes, SHA-256 `a78406138ce36fbdd06116126c180f2a6de8afafdde60e0ed6a9c27696ea7dbb`) and x86_64 (109,818,340 bytes, SHA-256 `7a54ac8eadcdb5abac5ce8f87337aea723d73dd9ffc79e54fbeb37df45f603e7`); see the release's `SHA256SUMS.txt`.
+- Minimum Android API 28; compile/target SDK 37. No physical Xiaomi/ARM64 run was performed. Prior x86_64 emulator tests showed intermittent GLES viewport/framebuffer problems; behavior on the user's Xiaomi remains unverified.
+- This remains a development preview, not full desktop feature parity or a stable release. If Android refuses installation due to a different debug signing key, uninstall the previous `.debug` app first; uninstalling deletes its local data.
+
 ## v0.1.0 Android Preview 9
 
 - Published as [GitHub prerelease `v0.1.0-android-preview.9`](https://github.com/Exa201/SolidCraft-Mobile/releases/tag/v0.1.0-android-preview.9) from source commit `395fe89310355b99fb22831fd6627cf3c4259620`; the GitHub release assets were replaced with the exact APKs uploaded by Android workflow [41236181932](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41236181932), which completed successfully.
