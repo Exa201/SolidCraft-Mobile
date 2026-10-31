@@ -7,6 +7,13 @@ android {
     compileSdk = 37
     ndkVersion = "30.0.16248370"
 
+    buildTypes {
+        getByName("debug") {
+            // Avoid a signature conflict with the CI-signed release package on test devices.
+            applicationIdSuffix = ".debug"
+        }
+    }
+
     defaultConfig {
         applicationId = "org.solidcraft.mobile"
         minSdk = 28
