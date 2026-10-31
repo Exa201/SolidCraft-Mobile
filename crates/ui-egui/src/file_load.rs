@@ -344,6 +344,8 @@ fn start(app: &mut SolveApp) {
     let (preview_tx, preview_rx) = std::sync::mpsc::channel();
     let (command, params) = request.command();
     let scope = request.scope.clone();
+    let persist_document_save = app.services.persist_document_save.clone();
+    let persist_output_path = (request.kind == Kind::ExportDxf).then(|| request.path.clone());
     let thumbnail = request.kind == Kind::Open;
     // While a design rebuilds, a picture of what is built so far (a large design takes a while).
     let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -407,6 +409,12 @@ fn start(app: &mut SolveApp) {
             compute(scratch, command, &params, scope, thumbnail, &worker_phase, &worker_progress)
         }))
         .unwrap_or_else(|_| Err("the file operation failed; the current design is unchanged".into()));
+        let result = match (result, persist_document_save, persist_output_path) {
+            (Ok(made), Some(persist), Some(path)) => {
+                persist(&path).map(|()| made).map_err(|error| format!("could not save {} to its Android document: {error}", path))
+            }
+            (result, _, _) => result,
+        };
         worker_finished.store(true, Ordering::Relaxed);
         let _ = tx.send(result);
     });

@@ -87,7 +87,8 @@ fn positioned_shared_buttons_center_text_and_respect_disabled_clicks_in_both_the
                 [Rect::from_min_size(egui::pos2(20.0, 30.0), vec2(108.0, 32.0)), Rect::from_min_size(egui::pos2(140.0, 30.0), vec2(108.0, 32.0))];
             let mut clicks = [0_usize; 2];
             let mut draw = |events| {
-                ctx.run_ui(
+                crate::test_support::frame(
+                    &ctx,
                     RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(320.0, 200.0))), events, focused: true, ..Default::default() },
                     |ui| {
                         ui.add_enabled_ui(enabled, |ui| {

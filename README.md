@@ -8,7 +8,7 @@
   <strong>An open-source parametric 3D CAD application built in pure Rust.</strong><br />
   Sketch, constrain, and build solids with a parametric feature timeline. Change a dimension
   and watch your model rebuild. Run it on your desktop, in your browser, or let AI agents
-  model through the built-in MCP server.
+  model through the built-in MCP server. Android build setup is documented in [ANDROID.md](ANDROID.md).
 </p>
 
 <div align="center">
@@ -142,3 +142,7 @@ Tinkercad are trademarks of their respective owners, named only to describe comp
 [linux-appimage]: https://github.com/tangency-labs/solidcraft/releases/latest/download/solidcraft-linux-x86_64.AppImage
 [snap-store]: https://snapcraft.io/solidcraft
 [web-app]: https://solidcraft.io/app
+
+## SolidCraft Mobile
+
+See [SolidCraft Mobile Android setup](ANDROID.md), [architecture](ARCHITECTURE.md), the [per-command parity inventory](FEATURE_PARITY.md), [test report](TEST_REPORT.md), and [release status](RELEASE_NOTES.md). Android remains an early preview: Storage Access Framework open/save and initial viewport touch navigation have been exercised, while full command parity, device lifecycle coverage, and release signing remain incomplete.

@@ -120,6 +120,44 @@ fn browser_header_folds_the_floating_card_to_its_header_and_back() {
     assert!((rect_of("browser:card").unwrap().height() - open.height()).abs() < 1.0);
 }
 
+#[test]
+fn narrow_floating_browser_starts_compact_and_expands_on_touch() {
+    let mut h = Harness::new();
+    h.app.run("solid.box", json!({"body_name":"Block", "operation":"new_body", "length":10, "width":10, "height":10, "corner":[0,0,0]})).unwrap();
+    h.app.tree.expanded.insert("c0/bodies".into());
+    h.call("ui.resize", json!({"width":390,"height":844}));
+    h.settle();
+    let compact = rect_of("browser:card").unwrap();
+    assert!(compact.width() <= 200.0, "phone browser should leave most of the viewport visible: {compact:?}");
+    assert!(handle_at("row:Untitled").is_none(), "tree rows are hidden until requested");
+    assert!(!h.app.tree.panel_collapsed, "mobile compact state must not overwrite desktop preference");
+    let header = handle_at("browser:header").unwrap();
+    h.call("ui.click", json!({"x":header.x,"y":header.y}));
+    h.settle();
+    assert!(h.app.tree.mobile_expanded);
+    assert!(handle_at("row:Untitled").is_some(), "expanding exposes the model tree");
+    assert!((rect_of("browser:card").unwrap().width() - 250.0).abs() < 1.0);
+    let card = rect_of("browser:card").unwrap();
+    h.call("ui.scroll", json!({"x":card.center().x,"y":card.center().y,"delta":-1800}));
+    h.settle();
+    let body_row =
+        drawn_rows().into_iter().find(|(label, ..)| label == "Block").map(|(_, rect, ..)| rect).expect("the body row is reachable on a phone");
+    assert_eq!(body_row.height(), 48.0, "phone rows provide a full touch target");
+    h.call("ui.click", json!({"x":body_row.center().x,"y":body_row.bottom()-2.0}));
+    h.settle();
+    assert!(
+        h.app.session.selection.iter().any(|item| matches!(item, solidcraft_engine::Sel::Body { name } if name == "Block")),
+        "a touch near the bottom of the row still selects the body; row={body_row:?}, card={:?}, selection={:?}",
+        rect_of("browser:card"),
+        h.app.session.selection
+    );
+
+    h.call("ui.resize", json!({"width":900,"height":600}));
+    h.settle();
+    assert!(!h.app.tree.panel_collapsed);
+    assert!(drawn_rows().iter().any(|(label, rect, ..)| label == "Block" && rect.height() == 26.0), "desktop density is preserved");
+}
+
 /// Tiny or odd window sizes never panic: the cards leave out what cannot fit.
 #[test]
 fn tiny_floating_windows_never_panic() {
@@ -173,7 +211,7 @@ fn browser_title_uses_a_single_semibold_run() {
     let mut app = SolveApp::new(Default::default(), Default::default());
     let output = crate::test_support::frame(&ctx, egui::RawInput::default(), |ui| {
         ui.set_width(250.0);
-        browser_header(&mut app, ui, true);
+        browser_header(&mut app, ui, true, false, false);
     });
     let title = crate::i18n::tr("ui.browser_title");
     let titles: Vec<_> = output

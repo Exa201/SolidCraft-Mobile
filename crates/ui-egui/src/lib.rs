@@ -12,6 +12,7 @@ use crate::ui_kit::{Container, Surface};
 pub mod access;
 pub mod agent_chat;
 pub mod agent_cursor;
+pub mod android_input;
 pub mod bom_panel;
 pub mod browser;
 pub mod browser_canvas;
@@ -327,6 +328,12 @@ pub struct Services {
     /// the picker's first filter (`&[]`: designs, CAD files and meshes, #1801).
     pub pick_open: Option<Box<dyn Fn(&[&str]) -> FilePickerFuture>>,
     pub pick_save: Option<Box<dyn Fn(&str, &[&str]) -> FilePickerFuture>>,
+    /// Persist a staged save back to a host document URI after its local write succeeds.
+    pub persist_document_save: Option<std::sync::Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>>,
+    /// Open an exported mesh in the host's app chooser (Android share sheet).
+    pub share_mesh: Option<Box<dyn Fn(&str, &str) -> Result<(), String>>>,
+    /// An app-private directory suitable for staging files passed to [`Services::share_mesh`].
+    pub share_mesh_dir: Option<Box<dyn Fn() -> Result<String, String>>>,
     /// Open a dialog for one file of a kind (its name, its extensions): on macOS a dialog allows
     /// only the types it names, so the agent chat's files need a dialog of their own. `None`: the
     /// Open dialog.
@@ -1627,7 +1634,8 @@ impl SolveApp {
         }
         let full = ui.available_rect_before_wrap();
         if floating {
-            let cards = shell::Cards::new(full, self.ui.layout, toolbar::ribbon_height(self.preferences.ribbon_labels));
+            let ribbon_labels = toolbar::ribbon_labels_for(self.preferences.ribbon_labels, full.width());
+            let cards = shell::Cards::new(full, self.ui.layout, toolbar::ribbon_height(ribbon_labels));
             self.shell.cards = vec![cards.workspace, cards.ribbon];
             self.shell.history = if left_timeline {
                 let below_ribbon = egui::Rect::from_min_max(egui::pos2(full.left(), cards.bottom), full.max);

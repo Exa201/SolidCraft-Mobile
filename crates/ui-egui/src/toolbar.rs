@@ -4,7 +4,7 @@ use crate::fonts::RichTextExt as _;
 use crate::icons::glyphs::pin_icon;
 use crate::ui_kit::{Container, Edge, Surface};
 use egui::{Align2, Color32, FontId, Rect, Sense, Stroke, pos2, vec2};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::theme::Tokens;
 use crate::{SolveApp, icons};
@@ -107,11 +107,42 @@ const ICON_GROUP_HEIGHT: f32 = 62.0;
 pub(crate) fn ribbon_height(labels: bool) -> f32 {
     if labels { RIBBON_HEIGHT } else { TAB_ROW_HEIGHT + ICON_GROUP_HEIGHT + 1.0 }
 }
+
+/// Keep command names where the screen can fit them; use the denser icon ribbon on phone-width
+/// viewports while preserving the user's label preference on larger windows and tablets.
+pub(crate) fn ribbon_labels_for(preference: bool, viewport_width: f32) -> bool {
+    preference && viewport_width.is_finite() && viewport_width >= 600.0
+}
+
+fn recent_menu_label(path: &str, missing: bool) -> String {
+    let name = std::path::Path::new(path).file_name().map(|name| name.to_string_lossy()).unwrap_or_else(|| path.into());
+    format!("{name}{}", if missing { " (missing)" } else { "" })
+}
 const BUTTON_GAP: f32 = 3.0;
 const BUTTON_MIN_WIDTH: f32 = 54.0;
 const BUTTON_MAX_WIDTH: f32 = 76.0;
 const BUTTON_LABEL_PADDING: f32 = 10.0;
 const SECTION_HEIGHT: f32 = 20.0;
+
+#[cfg(test)]
+mod responsive_ribbon_tests {
+    use super::{recent_menu_label, ribbon_labels_for};
+
+    #[test]
+    fn command_labels_are_compact_on_phone_width_and_preserved_on_tablets() {
+        assert!(!ribbon_labels_for(true, 432.0));
+        assert!(ribbon_labels_for(true, 600.0));
+        assert!(ribbon_labels_for(true, 900.0));
+        assert!(!ribbon_labels_for(false, 900.0));
+        assert!(!ribbon_labels_for(true, f32::NAN));
+    }
+
+    #[test]
+    fn recent_file_menu_shows_document_name_instead_of_android_private_path() {
+        assert_eq!(recent_menu_label("/data/user/0/org.solidcraft.mobile/files/Plate.solidcraft", false), "Plate.solidcraft");
+        assert_eq!(recent_menu_label("/data/user/0/org.solidcraft.mobile/files/Gone.solidcraft", true), "Gone.solidcraft (missing)");
+    }
+}
 
 /// The » button's room at the end of the panels, kept only while some panel is in it.
 pub const MORE_ROOM: f32 = 40.0;
@@ -515,8 +546,10 @@ fn file_menu(app: &mut SolveApp, ctx: &egui::Context) {
                 crate::ui_kit::Menu::button(ui, app.tr("ui.open_recent"), |ui| {
                     for path in app.home.recent.clone() {
                         let missing = !crate::home::available(app, &path);
-                        let label = format!("{path}{}", if missing { " (missing)" } else { "" });
-                        if crate::context_menu::button(ui, &label, "open").clicked() {
+                        let label = recent_menu_label(&path, missing);
+                        let response = crate::context_menu::button(ui, &label, "open");
+                        response.clone().on_hover_text(&path);
+                        if response.clicked() {
                             crate::home::open_recent(app, &path);
                             close = true;
                             ui.close();
@@ -693,9 +726,12 @@ fn export_as(app: &mut SolveApp, ext: &str, format: Option<&str>) {
         if let Some(format) = format {
             params["format"] = json!(format);
         }
-        if app.run("file.export", params).is_ok() {
+        let language = app.preferences.language.clone();
+        let on_success = Some(Box::new(move |app: &mut SolveApp, _result: &Value| {
+            let _language = crate::i18n::scope(&language);
             app.set_status(format!("Exported {path}"), false);
-        }
+        }) as Box<dyn FnOnce(&mut SolveApp, &Value)>);
+        crate::save_job::start_export(app, "file.export", params, on_success);
     });
 }
 
@@ -912,7 +948,7 @@ pub fn toolbar(app: &mut SolveApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     crate::workspace::sync_context(app);
     let floating = Container::for_layout(app.ui.layout, Surface::Panel).floating();
-    let labels = app.preferences.ribbon_labels;
+    let labels = ribbon_labels_for(app.preferences.ribbon_labels, ui.available_width());
     let button_height = if labels { BUTTON_HEIGHT } else { ICON_BUTTON_HEIGHT };
     let group_height = if labels { GROUP_HEIGHT } else { ICON_GROUP_HEIGHT };
     let ribbon_height = ribbon_height(labels);

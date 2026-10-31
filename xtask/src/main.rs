@@ -56,7 +56,7 @@ commands:
   lists [--fix]   check that files many changes add to are sorted one item per line (the
                   message catalogs in assets/locales); --fix sorts them
   test [CARGO ARGS] [-- TEST ARGS]
-                  build the tests with the ci profile, then run every test binary at once
+                  build tests with the ci profile, then run binaries with bounded parallelism
                   (and the doc tests alongside)
   wasm            cargo check every library crate and the web app for wasm32-unknown-unknown
   web-offline [DIR]
@@ -92,7 +92,7 @@ fn main() -> ExitCode {
         Some("lists") => lists::run(&root(), rest.contains(&"--fix")),
         Some("test") => {
             let (cargo_args, test_args) = rest.iter().position(|a| *a == "--").map_or((&rest[..], &[][..]), |i| (&rest[..i], &rest[i + 1..]));
-            test::run(cargo_args, test_args, vec![test::doc_tests(cargo_args, test_args)])
+            test::run(cargo_args, test_args, test::doc_tests_if_unfiltered(cargo_args, test_args))
         }
         Some("ci") => cmd_ci(),
         Some("wasm") => cmd_wasm(),
