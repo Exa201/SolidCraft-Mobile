@@ -50,3 +50,11 @@ SolidCraft Mobile is an early Android development preview of the shared SolidCra
 - This APK is debug-signed, not a production release. Install it only if you are comfortable sideloading a test build.
 
 See [TEST_REPORT.md](TEST_REPORT.md) for the exact test scope and device observations.
+## v0.1.0 Android Preview 11
+
+- Published as [GitHub prerelease `v0.1.0-android-preview.11`](https://github.com/Exa201/SolidCraft-Mobile/releases/tag/v0.1.0-android-preview.11) from source commit `c607aafdd6be909f089af2139f70a7f04c84f762`. The exact Android CI artifacts are attached to the release.
+- Android workflow [41248780345](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41248780345), Docker workflow [41248780350](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41248780350), and packaging lint [41248780366](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41248780366) passed. Aggregate PR workflow [41248780342](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41248780342) remained pending despite these individual checks.
+- Adds a durable Android checkpoint for Recent CAD paths after successful Open, Save, or Save As. Failed saves do not replace the previous checkpoint.
+- The exact CI x86_64 APK was installed on an isolated API-36 emulator and opened a cache-free one-body CAD fixture through SAF; the shaded body rendered. Save As followed by immediate process restart was verified with the prior local APK, but not with this exact CI artifact. No physical Xiaomi/ARM64 test was run.
+- APK sizes and SHA-256: arm64-v8a 93,028,799 bytes (`34EF60EC8A63BEF01BC9E67F020EBDA6AEB32DC7057B1FB61195560F5CE33C5C`); x86_64 109,877,812 bytes (`B1C091138046728E12E224BC807ED7DB4B64457654EA072AED3C0FCF920CA3E7`).
+- Minimum Android API 28; compile/target SDK 37. APKs are debug-signed. This is an experimental development preview without full desktop feature parity.
