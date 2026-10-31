@@ -460,3 +460,9 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - Installed this exact APK on the isolated Android API-36 x86_64 AVD and opened a cache-free one-body fixture through the system Downloads picker. The CAD browser showed one body and the shaded box rendered in the viewport.
 - Exact-artifact Save As followed by immediate process death/relaunch was not verified. Attempts to continue the UI run ended at the emulator launcher before completion. A prior local build passed that workflow; it is not evidence for this exact CI artifact. No Xiaomi/physical ARM64 device test was available.
 - No matching app fatal exception, Rust panic, or known framebuffer error was observed during the successful Open/render check. Unrelated Android instrumentation-runner and emulator Bluetooth fatal lines were present in the retained device log and were not attributed to the app.
+
+### Android viewport long-press context menu (2026-11-01)
+
+- Android touch long-press in the CAD viewport now opens the existing ordinary object context-menu list. Desktop radial-menu behavior stays tied to the secondary mouse button; touch always opens a readable list and does not interpret release position as a radial flick. “Select Other…” remains available in the context menu for overlapping geometry.
+- Added `context_menu::tests::android_viewport_touch_hold_opens_the_ordinary_context_list`, passing with the Android-touch input path enabled in the host harness. `cargo test -p solidcraft-ui-egui --profile ci navigation::tests --lib` passed 18/18; `cargo test -p solidcraft-ui-egui --profile ci context_menu::tests --lib` passed 8/8. `cargo fmt --all -- --check` and `git diff --check` passed.
+- This verifies the shared egui event handling; runtime long-press behavior still needs confirmation on Android hardware. The follow-up APK/CI build is pending.

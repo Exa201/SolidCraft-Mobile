@@ -1645,21 +1645,47 @@ fn sector(d: Vec2) -> Option<usize> {
 /// Press-and-hold of the right button in the viewport opens the menu; releasing over a
 /// direction picks it.
 fn track_hold(app: &mut SolveApp, ctx: &egui::Context) {
-    if !app.preferences.radial_context_menu || crate::mouse_gesture::active(app) {
+    track_hold_with_touch(app, ctx, cfg!(target_os = "android"));
+}
+
+/// Android has no secondary mouse button, so a stationary viewport touch opens the ordinary
+/// context list. Keep this separate from the desktop right-button/radial gesture and make the
+/// touch mode injectable so the same event path can be covered by host tests.
+fn track_hold_with_touch(app: &mut SolveApp, ctx: &egui::Context, android_touch: bool) {
+    if crate::mouse_gesture::active(app) {
         app.menu.press = None;
         app.menu.flick = false;
         app.menu.radial = false;
         return;
     }
-    let (pressed, down, released, pos, time) = ctx.input(|i| {
+    let (pressed, down, released, pos, time, has_touch) = ctx.input(|i| {
         (
             i.pointer.button_pressed(egui::PointerButton::Secondary),
             i.pointer.secondary_down(),
             i.pointer.button_released(egui::PointerButton::Secondary),
             i.pointer.latest_pos(),
             i.time,
+            i.any_touches(),
         )
     });
+    let touch_hold = android_touch && has_touch;
+    if !app.preferences.radial_context_menu && !touch_hold {
+        app.menu.press = None;
+        app.menu.flick = false;
+        app.menu.radial = false;
+        return;
+    }
+    let (pressed, down, released) = if touch_hold {
+        ctx.input(|i| {
+            (
+                pressed || i.pointer.button_pressed(egui::PointerButton::Primary),
+                down || i.pointer.primary_down(),
+                released || i.pointer.button_released(egui::PointerButton::Primary),
+            )
+        })
+    } else {
+        (pressed, down, released)
+    };
     let free = app.tool.is_none() && app.dialog.is_none() && app.preferences.nav != crate::prefs::OPENSCAD_NAV;
     if pressed && free && app.viewport.context_menu.is_none() && app.viewport.mouse.is_some() {
         app.menu.press = pos.map(|p| (p, time));
@@ -1671,12 +1697,19 @@ fn track_hold(app: &mut SolveApp, ctx: &egui::Context) {
         } else if time - t0 > 0.35 {
             app.menu.press = None;
             open(app, p0);
-            app.menu.flick = true;
+            if touch_hold {
+                // The touch's release is not a radial flick. A list remains usable on phones,
+                // even when the user enabled the desktop radial menu preference.
+                app.menu.radial = false;
+                app.menu.flick = false;
+            } else {
+                app.menu.flick = true;
+            }
         } else {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
     }
-    if released && app.menu.flick {
+    if released && app.menu.flick && !touch_hold {
         app.menu.flick = false;
         if let (Some(at), Some(p)) = (app.viewport.context_menu, pos) {
             let c = radial_center(at, ctx.content_rect());
@@ -2013,6 +2046,28 @@ mod tests {
             output.textures_delta.clear();
         }
         assert!(app.viewport.context_menu.is_none() && app.menu.press.is_none() && !app.menu.flick);
+    }
+
+    #[test]
+    fn android_viewport_touch_hold_opens_the_ordinary_context_list() {
+        let mut app = SolveApp::new(solidcraft_engine::Session::default(), Default::default());
+        let ctx = crate::fonts::test_context();
+        let point = pos2(600.0, 400.0);
+        app.viewport.mouse = Some(point);
+        let device = egui::TouchDeviceId(1);
+        let start = vec![
+            egui::Event::PointerMoved(point),
+            egui::Event::PointerButton { pos: point, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE },
+            egui::Event::Touch { device_id: device, id: egui::TouchId(1), phase: egui::TouchPhase::Start, pos: point, force: None },
+        ];
+        for (time, events) in [(0.0, start), (0.4, vec![])] {
+            let mut output =
+                ctx.run_ui(egui::RawInput { time: Some(time), events, ..Default::default() }, |_| track_hold_with_touch(&mut app, &ctx, true));
+            output.textures_delta.clear();
+        }
+        assert_eq!(app.viewport.context_menu, Some(point), "a held Android touch opens the context menu");
+        assert!(!app.menu.radial, "touch opens the readable list, even if the desktop radial preference is enabled");
+        assert!(!app.menu.flick, "lifting the touch must not select a radial direction");
     }
 
     #[test]
