@@ -408,3 +408,9 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - Refined API-36 reproduction with a clean install of the exact Preview 7 x86_64 APK: the first Open of a 500-byte cache-free box showed the body and “Open done”. The next normal viewport redraw (tapping File) turned the full app surface black and logged the same `GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` / depth attachment `0x8d56` errors. Rotating to landscape and back did not recover rendering. This demonstrates the failure is not limited to the SAF return itself; a later model viewport redraw triggers it. The surface remains black until app restart. This run used only the dedicated SolidCraft API-36 AVD.
 - Immersive-bars A/B attempt: built a temporary Kotlin variant with system-bar hiding disabled and freshly rebuilt the x86_64 Rust library for GLES. Android 16 still drew system bars over the top edge-to-edge game UI, obscuring/intercepting the File control, so SAF Open and the redraw could not be repeated. The experiment is inconclusive; the temporary Kotlin change was reverted and no conclusion about system-bar resizing is drawn.
 - Evidence files are local diagnostics under the untracked `artifacts/` directory and are intentionally not part of the repository.
+
+### Two-finger pinch and twist camera regression (2026-10-31)
+
+- Added `navigation::tests::two_finger_pinch_and_twist_change_only_the_camera`, which applies egui multitouch input to the shared camera path. It verifies a 1.5× spread reduces camera distance, a two-finger twist changes camera orientation, and neither gesture modifies the CAD design.
+- `cargo fmt --all -- --check` passed. `cargo test -j 1 -p solidcraft-ui-egui --lib two_finger_pinch_and_twist_change_only_the_camera` passed 1/1 (1,878 filtered out).
+- This is host-side behavior coverage. No physical-device gesture run was performed in this turn.

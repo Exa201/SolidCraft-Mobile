@@ -903,6 +903,35 @@ mod tests {
     }
 
     #[test]
+    fn two_finger_pinch_and_twist_change_only_the_camera() {
+        use super::*;
+        let mut app = crate::SolveApp::new(Default::default(), crate::Services::default());
+        let rect = Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0));
+        let design = app.session.design().into_owned();
+
+        let before_pinch = app.cam;
+        let pinch = egui::MultiTouchInfo {
+            start_time: 0.0,
+            start_pos: rect.center(),
+            num_touches: 2,
+            zoom_delta: 1.5,
+            zoom_delta_2d: egui::vec2(1.5, 1.5),
+            rotation_delta: 0.0,
+            translation_delta: egui::Vec2::ZERO,
+            force: 0.0,
+            center_pos: rect.center(),
+        };
+        apply_touch_navigation(&mut app, rect, pinch, NavCaps::MODEL);
+        assert!(app.cam.distance < before_pinch.distance, "spreading fingers should zoom in");
+
+        let before_twist = app.cam;
+        let twist = egui::MultiTouchInfo { zoom_delta: 1.0, zoom_delta_2d: egui::Vec2::splat(1.0), rotation_delta: 0.15, ..pinch };
+        apply_touch_navigation(&mut app, rect, twist, NavCaps::MODEL);
+        assert_ne!(app.cam, before_twist, "twisting two fingers should orbit the camera");
+        assert_eq!(app.session.design().as_ref(), &design, "touch navigation must not alter the CAD document");
+    }
+
+    #[test]
     fn touch_navigation_discards_non_finite_input_and_bounds_hostile_deltas() {
         use super::*;
         let invalid = egui::MultiTouchInfo {
