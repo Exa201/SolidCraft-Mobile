@@ -2,6 +2,14 @@
 
 SolidCraft Mobile is an early Android development preview of the shared SolidCraft Rust CAD engine and egui interface. It is intended for hands-on testing and feedback, not as a feature-complete or production-signed CAD release.
 
+## v0.1.0 Android Preview 7
+
+- Published as [GitHub prerelease `v0.1.0-android-preview.7`](https://github.com/Exa201/SolidCraft-Mobile/releases/tag/v0.1.0-android-preview.7) from source commit `ab7c1b03f3d11833e6a11917d785280301bef0d1`.
+- GitHub Android workflow [41220939709](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41220939709) passed Kotlin/JVM tests, Android APK build, ARM64/x86_64 split and package verification, signature verification, and artifact upload. 43 JVM tests passed in the fresh local test run for this source.
+- Attached debug-signed APKs for arm64-v8a (93,000,023 bytes, SHA-256 `1cc38db6adb621cabbbdbbee5110aa1ad6fa49f0caa7a946a613e8ce1e0cc41d`) and x86_64 (109,812,420 bytes, SHA-256 `deec1e37c2b456f6287a725d1da4b6398bb503525120c3dd7e57755b4104e026`); see the release's `SHA256SUMS.txt`.
+- Installed the exact CI x86_64 APK on API-35 and API-36 emulators and confirmed app launch. Successful SAF open of cached and cache-free box files reproduced a black screen with GLES framebuffer errors on both API versions; API 36 also reproduced it after Save As. Picker cancellation and creating a box directly in the UI did not. One earlier API-35 open succeeded but the result was not repeatable. The cause and Xiaomi/ARM64 behavior remain unknown.
+- The APK remains a development preview without full desktop parity. On a later preview, Android may require uninstalling the debug package if its ephemeral signing key changes; this removes that installation's local data.
+
 ## v0.1.0 Android Preview 6
 
 - Built by Android APK workflow run [41211769543](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41211769543) from source commit `96a223144f555d15625c633a2a9882889a3a3c5b`.
