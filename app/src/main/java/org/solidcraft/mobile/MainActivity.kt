@@ -1,6 +1,7 @@
 package org.solidcraft.mobile
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
@@ -22,6 +23,7 @@ import org.json.JSONObject
 /** Android lifecycle, text-input host, and Storage Access Framework bridge. */
 class MainActivity : GameActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        processContext = applicationContext
         super.onCreate(savedInstanceState)
         hideSystemBars()
         activeActivity = WeakReference(this)
@@ -200,6 +202,8 @@ class MainActivity : GameActivity() {
         private const val SHARE_CACHE_RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000
         private val documentResults = DocumentRequestResults()
         private val activeRequest = DocumentPickerRequestSlot<DocumentRequest> { it.kind }
+        /** Provider write-back runs on native save workers that may outlive the current Activity. */
+        @Volatile private var processContext: Context? = null
         @Volatile private var activeActivity: WeakReference<MainActivity>? = null
 
         private data class DocumentRequest(
@@ -311,8 +315,9 @@ class MainActivity : GameActivity() {
         /** Copies a staged CAD save back to its persisted document-provider URI. Empty means success. */
         @JvmStatic
         fun writeBackDocument(path: String): String {
-            val activity = activeActivity?.get() ?: return "The Android activity is no longer available"
-            val encoded = activity.documentPreferences().getString(path, null) ?: return ""
+            val context = processContext ?: return "The Android application context is no longer available"
+            val encoded = context.getSharedPreferences("solidcraft_documents", Context.MODE_PRIVATE)
+                .getString(path, null) ?: return ""
             return try {
                 val mapping = JSONObject(encoded)
                 if (!mapping.optBoolean("writable", false)) return "This source document is read-only. Use Save As to choose a writable location."
@@ -320,8 +325,8 @@ class MainActivity : GameActivity() {
                 val uri = Uri.parse(mapping.getString("uri"))
                 val backup = File(staged.parentFile, ".${staged.name}.save-backup")
                 DocumentWriteBack.persist(staged, backup, object : DocumentStreams {
-                    override fun openRead() = activity.contentResolver.openInputStream(uri)
-                    override fun openWrite() = activity.contentResolver.openOutputStream(uri, "wt")
+                    override fun openRead() = context.contentResolver.openInputStream(uri)
+                    override fun openWrite() = context.contentResolver.openOutputStream(uri, "wt")
                 })
             } catch (error: Exception) {
                 error.message ?: "Could not write the CAD file to the selected document provider"

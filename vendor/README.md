@@ -4,6 +4,14 @@ Copies of third-party crates that SolidCraft builds with local fixes, wired in w
 `[patch.crates-io]` in the workspace `Cargo.toml`. They keep their own licence; changed lines
 are marked `SolidCraft:` in the source.
 
+## winit 0.30.13 (Apache-2.0)
+
+Changes:
+- `src/platform_impl/android/mod.rs`: handle `MainEvent::Destroy` by exiting the event loop.
+  GameActivity waits for the native `android_main` entry point to return during Activity teardown;
+  upstream ignored this event, so the native loop stayed alive and Android reported an Activity
+  destroy timeout. Exiting lets eframe run its normal save-and-destroy path.
+
 ## truck-shapeops 0.4.0 (Apache-2.0, © RICOS Co. Ltd., https://github.com/ricosjp/truck)
 
 Changes:

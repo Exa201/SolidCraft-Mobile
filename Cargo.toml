@@ -155,6 +155,10 @@ strip = "debuginfo"
 
 # truck-shapeops with SolidCraft fixes (Apache-2.0, see vendor/truck-shapeops and ATTRIBUTION.md).
 [patch.crates-io]
+# Android GameActivity waits for android_main to return during Activity destruction.
+# The upstream winit Android backend ignores MainEvent::Destroy, leaving eframe's loop alive.
+winit = { path = "vendor/winit" }
+
 truck-geometry = { path = "vendor/truck-geometry" }
 truck-shapeops = { path = "vendor/truck-shapeops" }
 truck-stepio = { path = "vendor/truck-stepio" }
