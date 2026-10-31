@@ -72,7 +72,7 @@ jobs:
             expected_abi=${spec%%:*}
             apk=${spec#*:}
             badging=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$apk")
-            grep -q "^package: name='org.solidcraft.mobile'" <<<"$badging"
+            grep -q "^package: name='org.solidcraft.mobile.debug'" <<<"$badging"
             actual_abi=$(sed -n 's/^native-code: //p' <<<"$badging")
             test "$actual_abi" = "'$expected_abi'"
             "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$apk"
