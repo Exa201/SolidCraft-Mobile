@@ -32,6 +32,16 @@ pub fn install(rs: &egui_wgpu::RenderState, depth_bits: u8, stencil_bits: u8, sa
 /// rasterizer draws them.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn install_picture_renderer(rs: &egui_wgpu::RenderState) {
+    #[cfg(target_os = "android")]
+    if rs.adapter.get_info().backend == wgpu::Backend::Gl {
+        // Android's GLES backend is used from background thumbnail/readback workers as well as
+        // the UI render thread. Readbacks on the shared GLES device can invalidate subsequent
+        // viewport frames, so use the CPU rasterizer for these offscreen pictures on GLES.
+        log::warn!("using CPU picture rendering on Android GLES to keep background readbacks off the viewport device");
+        install_cpu_picture_renderer();
+        return;
+    }
+
     match solidcraft_gpu::capture::Capturer::new(&rs.adapter, rs.device.clone(), rs.queue.clone()) {
         Ok(capturer) => {
             let capturer = std::sync::Arc::new(capturer);
