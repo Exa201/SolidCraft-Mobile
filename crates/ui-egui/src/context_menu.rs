@@ -2053,6 +2053,7 @@ mod tests {
         let mut app = SolveApp::new(solidcraft_engine::Session::default(), Default::default());
         let ctx = crate::fonts::test_context();
         let point = pos2(600.0, 400.0);
+        app.preferences.radial_context_menu = true;
         app.viewport.mouse = Some(point);
         let device = egui::TouchDeviceId(1);
         let start = vec![
