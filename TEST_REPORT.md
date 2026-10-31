@@ -428,3 +428,9 @@ Both packages are `org.solidcraft.mobile`, version `0.1.0`, min SDK 28, target/c
 - Selecting a Save As target no longer deletes an existing staged copy before the engine writes. The engine uses an atomic replacement; if serialization or disk writing fails, the previous working copy and Recent path stay readable while the provider destination remains untouched.
 - Added a staging regression test that confirms selecting an existing save target preserves its last complete contents until replacement.
 - Full `:app:testDebugUnitTest -x :app:buildRustAndroid --no-daemon` run passed: 45 tests, 0 failures, 0 errors, 0 skipped. `git diff --check` passed.
+
+### SAF URI mapping durability (2026-10-31)
+
+- Opening a provider document and choosing a Save As destination now synchronously commit the URI-to-working-copy mapping before returning the local path to the native engine. A failed preferences commit is surfaced as a picker failure instead of reporting an opened/saved document whose later provider write-back cannot be restored after process death.
+- Added JVM regression coverage for URI and writable-capability persistence, commit failure, and missing mapping fields.
+- Forced local `:app:testDebugUnitTest -x :app:buildRustAndroid --no-daemon --rerun-tasks` passed 48 tests, 0 failures, 0 errors, 0 skipped; `git diff --check` passed. GitHub APK CI for this source revision is still pending/running; no new APK is claimed from this test result.

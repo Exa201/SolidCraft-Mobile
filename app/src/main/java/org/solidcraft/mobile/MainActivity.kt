@@ -99,15 +99,11 @@ class MainActivity : GameActivity() {
             if (request.save) {
                 // Keep a previous working copy: file.save_as writes atomically and can fail before
                 // replacing it, while the provider destination is untouched until write-back.
-                val mapping = JSONObject().put("uri", uri.toString())
-                    .put("writable", allowed and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
-                documentPreferences().edit().putString(staged.absolutePath, mapping.toString()).apply()
+                persistDocumentMapping(staged.absolutePath, uri, allowed)
             } else {
                 val input = requireNotNull(contentResolver.openInputStream(uri)) { "The selected document could not be opened" }
                 DocumentStaging.replaceFrom(input, staged)
-                val mapping = JSONObject().put("uri", uri.toString())
-                    .put("writable", allowed and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
-                documentPreferences().edit().putString(staged.absolutePath, mapping.toString()).apply()
+                persistDocumentMapping(staged.absolutePath, uri, allowed)
             }
             val resources = GltfExternalResources.bufferPaths(staged)
             if (resources.isNotEmpty()) {
@@ -196,6 +192,13 @@ class MainActivity : GameActivity() {
     }
 
     private fun documentPreferences() = getSharedPreferences("solidcraft_documents", MODE_PRIVATE)
+
+    /** Persist the provider mapping before returning a working path to the native CAD engine. */
+    private fun persistDocumentMapping(path: String, uri: Uri, grantedFlags: Int) {
+        DocumentMapping.persist(path, uri.toString(), grantedFlags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0) { key, value ->
+            documentPreferences().edit().putString(key, value).commit()
+        }
+    }
 
     companion object {
         private const val MAX_GLTF_BUFFER_BYTES = 1L shl 30
