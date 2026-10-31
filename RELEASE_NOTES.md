@@ -1,30 +1,27 @@
 # SolidCraft Mobile Release Notes
 
-## Development preview status
+SolidCraft Mobile is an early Android development preview of the shared SolidCraft Rust CAD engine and egui interface. It is intended for hands-on testing and feedback, not as a feature-complete or production-signed CAD release.
 
-SolidCraft Mobile currently starts the shared SolidCraft Rust engine and CAD interface on Android. This is an early development preview, not a feature-complete mobile CAD release.
+## v0.1.0 Android Preview 6
 
-### Present
+- Built by Android APK workflow run [41211769543](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41211769543) from source commit `96a223144f555d15625c633a2a9882889a3a3c5b`.
+- Includes arm64-v8a and x86_64 CI APKs. Compile/target SDK 37; minimum Android API 28.
+- CI completed `:app:testDebugUnitTest :app:assembleDebug`, built both Rust Android ABIs, and verified the split APK package IDs, ABI contents, and signatures.
+- APKs are debug-signed. The package ID is `org.solidcraft.mobile.debug` so this preview can coexist with the older `org.solidcraft.mobile` previews. A later CI build can have a different debug signing key; if Android refuses an update, uninstall this `.debug` app before installing the next build (this removes its local data).
+- ARM64 APK SHA-256: `780E301F1CC3354EEC5FC5450DB88785D07DCD039A74685A9BEBC703CDF14417`.
+- The separate x86_64 emulator APK is also attached for testing.
 
-- Rust geometry/feature engine and egui CAD interface are reused from SolidCraft.
-- Android GameActivity host with separate arm64-v8a and x86_64 APKs.
-- Compile/target SDK 37, minimum API 28.
-- Android Storage Access Framework bridge for open/create-document requests, private staging, and URI writeback is implemented. Downloads provider open, Save As, reopen after process restart, and asynchronous DXF export passed on an API 36 emulator.
-- SAF writeback now fsyncs a local rollback copy and a hash marker before touching the provider; later saves can distinguish an already verified write from an interrupted one. The current APK passed a Downloads Save As → edit a box → save → force-stop/relaunch → Open Recent round trip on a clean API 36 AVD. JVM regression tests also cover stale backup cleanup and unreadable-provider recovery; simulated provider-failure rollback has not yet been verified on device.
-- Android stores UI preferences and the Recent list in app-private eframe storage. SAF working copies use durable URI-stable paths and can be reopened from Recent after a process restart.
-- The shared unsaved-design recovery service now starts in an Android-private recovery directory using the saved autosave interval; forced-crash recovery on device still needs verification.
-- The CAD viewport now hides Android system bars so the top toolbar remains touchable; temporary system bars can still be revealed with an edge swipe.
-- On narrow portrait windows, the floating Browser starts as a compact header to preserve the viewport and expands by touch to the full model tree. The shared Browser test group passes 12/12; the behavior was also checked on an API 36 emulator.
-- Earlier debug APKs installed and launched on an API 36 emulator and a physical Android 16 device; these are launch/display smoke checks, not validation of the latest dual-ABI artifacts or complete CAD workflow. The latest GitHub APKs passed package and signature checks but await device installation; see [TEST_REPORT.md](TEST_REPORT.md).
+### Included Android work
 
-### Not yet release-ready
+- SolidCraft's shared Rust geometry/feature engine and egui CAD interface hosted through Android GameActivity.
+- Android Storage Access Framework integration for opening and saving documents, private staging, and provider write-back; recent files and recovery infrastructure.
+- Touch-oriented CAD navigation work and Android lifecycle handling.
 
-- Additional-provider, failure, cancellation, lifecycle recovery, and broader Android device verification.
-- Mobile-first responsive treatment for the remaining panels and dialogs; only the command ribbon and floating Browser have narrow-screen adaptations so far.
-- Android-device gesture verification, precise small-element selection, stylus and mouse workflows. Two-finger mapping and viewport ownership pass a host egui integration test only.
-- Forced-process-death autosave and recovery prompt workflow on a physical Android device.
-- Automated Android UI/integration coverage and broader device verification.
-- Successful CI APK artifact for the current PR commit.
-- Signed release APK with reproducible artifact checksum.
+### Known limitations
 
-Do not treat the existing `v0.1.0-android-preview.1` debug prerelease as completion of this work. A new prerelease must wait for verified release criteria.
+- This is not full desktop feature parity. Some panels, dialogs, and workflows have not received mobile-specific interaction design, and device UI coverage is incomplete.
+- On an Android 16 x86_64 emulator, loading nonempty sketch and solid projects has reproduced a black display with GLES framebuffer errors (`depth attachment not complete: 0x8d56`, GL error `0x506`). It reproduced with both the host NVIDIA renderer and SwiftShader. The cause and behavior on physical ARM64 devices are not established. Please save work frequently and report whether this occurs on the Xiaomi.
+- No physical Xiaomi/ARM64 test was available during this build. The GitHub CI build and its host/unit tests do not substitute for that device test.
+- This APK is debug-signed, not a production release. Install it only if you are comfortable sideloading a test build.
+
+See [TEST_REPORT.md](TEST_REPORT.md) for the exact test scope and device observations.
