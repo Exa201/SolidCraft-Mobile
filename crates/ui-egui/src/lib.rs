@@ -330,6 +330,9 @@ pub struct Services {
     pub pick_save: Option<Box<dyn Fn(&str, &[&str]) -> FilePickerFuture>>,
     /// Persist a staged save back to a host document URI after its local write succeeds.
     pub persist_document_save: Option<std::sync::Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>>,
+    /// Persist recent CAD paths immediately after open/save, so mobile process death cannot race
+    /// the normal periodic preferences flush.
+    pub persist_recent_documents: Option<std::sync::Arc<dyn Fn(&[String]) -> Result<(), String> + Send + Sync>>,
     /// Open an exported mesh in the host's app chooser (Android share sheet).
     pub share_mesh: Option<Box<dyn Fn(&str, &str) -> Result<(), String>>>,
     /// An app-private directory suitable for staging files passed to [`Services::share_mesh`].
@@ -748,6 +751,16 @@ impl SolveApp {
         }
     }
 
+    /// Merge a host's durable recent-document checkpoint with the normal app preferences.
+    /// Checkpoint paths are promoted newest first while retaining unrelated older entries.
+    pub fn restore_recent_documents(&mut self, paths: &[String]) {
+        for path in paths.iter().rev() {
+            if !path.is_empty() {
+                self.home.add_recent(path);
+            }
+        }
+    }
+
     pub fn with_control(mut self, rx: Receiver<ControlRequest>) -> Self {
         self.control_rx = Some(rx);
         self
@@ -849,6 +862,12 @@ impl SolveApp {
                     self.home.add_recent(&p);
                     if matches!(id, "file.save" | "file.save_as") {
                         home::remember_session(&mut self.home, &self.session);
+                    }
+                    let persist_recent = self.services.persist_recent_documents.clone();
+                    if let Some(persist) = persist_recent
+                        && let Err(error) = persist(&self.home.recent)
+                    {
+                        self.set_status(format!("Document saved, but recent-file history could not be persisted: {error}"), true);
                     }
                 }
             }
@@ -1895,6 +1914,17 @@ pub fn now_ms() -> f64 {
 mod picker_test_support;
 #[cfg(test)]
 mod test_support;
+
+#[cfg(test)]
+mod recent_document_checkpoint_tests {
+    #[test]
+    fn durable_recent_checkpoint_is_merged_newest_first_with_preferences() {
+        let mut harness = crate::scenario::Harness::new();
+        harness.app.load_prefs(r#"{"recent":["older.solidcraft","shared.solidcraft"]}"#);
+        harness.app.restore_recent_documents(&["new.solidcraft".into(), "shared.solidcraft".into()]);
+        assert_eq!(harness.app.home.recent, ["new.solidcraft", "shared.solidcraft", "older.solidcraft"].map(str::to_owned),);
+    }
+}
 
 /// A SolidCraft design file (`.solidcraft`, or a design saved as JSON), as opposed to a STEP or
 /// mesh file.

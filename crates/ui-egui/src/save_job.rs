@@ -145,6 +145,12 @@ mod tests {
         let provider_release = std::sync::Mutex::new(release_provider_rx);
         let persisted_on = std::sync::Arc::new(std::sync::Mutex::new(None));
         let persisted_on_worker = persisted_on.clone();
+        let recent_checkpoint = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recent_checkpoint_sink = recent_checkpoint.clone();
+        h.app.services.persist_recent_documents = Some(std::sync::Arc::new(move |paths| {
+            *recent_checkpoint_sink.lock().map_err(|error| error.to_string())? = paths.to_vec();
+            Ok(())
+        }));
         h.app.services.persist_document_save = Some(std::sync::Arc::new(move |_| {
             provider_started_tx.send(()).map_err(|error| error.to_string())?;
             provider_release.lock().map_err(|error| error.to_string())?.recv().map_err(|error| error.to_string())?;
@@ -163,6 +169,11 @@ mod tests {
         assert_eq!(h.app.session.path.as_deref(), path.to_str());
         assert_eq!(h.app.session.doc.name, "Plate");
         assert!(h.app.home.recent.iter().any(|r| r.as_str() == path.to_str().unwrap()), "{:?}", h.app.home.recent);
+        assert_eq!(
+            recent_checkpoint.lock().unwrap().first().map(String::as_str),
+            path.to_str(),
+            "the Android checkpoint receives the newly saved path before Save As completes"
+        );
         assert!(h.app.session.log.iter().any(|l| l.contains("Save As")), "{:?}", h.app.session.log);
         // A failing save reports why, and leaves the changes unsaved.
         h.app.run("solid.sphere", json!({"diameter": 4})).unwrap();
@@ -170,6 +181,11 @@ mod tests {
         super::start(&mut h.app, "file.save_as", json!({"path": bad.to_string_lossy()}));
         super::tick(&mut h.app, true);
         assert!(h.app.session.is_dirty() && h.app.status.as_ref().is_some_and(|(_, _, error)| *error));
+        assert_eq!(
+            recent_checkpoint.lock().unwrap().first().map(String::as_str),
+            path.to_str(),
+            "failed Save As must not replace the durable history"
+        );
     }
 
     #[test]

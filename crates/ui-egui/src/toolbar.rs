@@ -1998,6 +1998,8 @@ mod header_report_tests {
         h.frames(3);
         h.step(&json!({"click":{"handle":"appbar:folder"}})).unwrap();
         h.step(&json!({"widget":"Export Design as JSON…"})).unwrap();
+        // Export writes on a worker; wait before inspecting its file, as Save As above does.
+        h.settle();
         assert_eq!(h.app.session.path.as_deref(), Some(saved.as_str()));
         assert!(h.dir.join("Exported copy.json").is_file());
         h.app.run("file.save", json!({})).unwrap();

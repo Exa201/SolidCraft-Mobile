@@ -69,10 +69,48 @@ pub(super) fn services() -> Services {
         pick_open: Some(Box::new(|extensions| picker(false, "", extensions))),
         pick_save: Some(Box::new(|name, extensions| picker(true, name, extensions))),
         persist_document_save: Some(std::sync::Arc::new(persist_document_save)),
+        persist_recent_documents: Some(std::sync::Arc::new(persist_recent_documents)),
         share_mesh: Some(Box::new(share_mesh)),
         share_mesh_dir: Some(Box::new(share_mesh_dir)),
         ..Default::default()
     }
+}
+
+pub(super) fn recent_documents() -> Result<Vec<String>, String> {
+    let encoded = with_jni(|env| {
+        let class = activity_class(env)?;
+        let result = env.call_static_method(class, jni_str!("loadRecentDocuments"), jni_sig!("()Ljava/lang/String;"), &[])?.l()?;
+        if result.is_null() {
+            return Ok(None);
+        }
+        let value = JString::cast_local(env, result)?;
+        Ok(Some(value.try_to_string(env)?))
+    })
+    .map_err(jni_error)?;
+    encoded.map_or_else(|| Ok(Vec::new()), |value| serde_json::from_str(&value).map_err(jni_error))
+}
+
+fn persist_recent_documents(paths: &[String]) -> Result<(), String> {
+    let serialized = serde_json::to_string(paths).map_err(jni_error)?;
+    let message = with_jni(|env| {
+        let class = activity_class(env)?;
+        let serialized = env.new_string(serialized)?;
+        let serialized_object: JObject<'_> = serialized.into();
+        let result = env
+            .call_static_method(
+                class,
+                jni_str!("persistRecentDocuments"),
+                jni_sig!("(Ljava/lang/String;)Ljava/lang/String;"),
+                &[JValue::Object(&serialized_object)],
+            )?
+            .l()?;
+        if result.is_null() {
+            return Ok("Android did not return a recent-file persistence result".to_string());
+        }
+        let value = JString::cast_local(env, result)?;
+        value.try_to_string(env)
+    })?;
+    if message.is_empty() { Ok(()) } else { Err(message) }
 }
 
 fn share_mesh_dir() -> Result<String, String> {

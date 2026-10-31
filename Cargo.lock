@@ -4265,6 +4265,7 @@ dependencies = [
  "egui",
  "jni",
  "log",
+ "serde_json",
  "solidcraft-engine",
  "solidcraft-ui-egui",
 ]

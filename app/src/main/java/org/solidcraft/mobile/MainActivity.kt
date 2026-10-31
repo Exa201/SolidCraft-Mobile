@@ -315,6 +315,24 @@ class MainActivity : GameActivity() {
             documentResults.cancel(id)
         }
 
+        /** Synchronously checkpoint the small recent-path list before reporting Save as complete. */
+        @JvmStatic
+        fun persistRecentDocuments(serialized: String): String {
+            val context = processContext ?: return "The Android application context is no longer available"
+            return if (context.getSharedPreferences("solidcraft_documents", Context.MODE_PRIVATE)
+                    .edit().putString("recent_documents", serialized).commit()) {
+                ""
+            } else {
+                "Android could not persist recent-file history"
+            }
+        }
+
+        /** Last durable CAD recents checkpoint, merged with eframe's regular preferences. */
+        @JvmStatic
+        fun loadRecentDocuments(): String? = processContext
+            ?.getSharedPreferences("solidcraft_documents", Context.MODE_PRIVATE)
+            ?.getString("recent_documents", null)
+
         /** Copies a staged CAD save back to its persisted document-provider URI. Empty means success. */
         @JvmStatic
         fun writeBackDocument(path: String): String {

@@ -77,6 +77,10 @@ fn android_main(app: AndroidApp) {
             if let Some(prefs) = creation.storage.and_then(|store| store.get_string(solidcraft_ui_egui::prefs::STORAGE_KEY)) {
                 solve.load_prefs(&prefs);
             }
+            match storage::recent_documents() {
+                Ok(recent) => solve.restore_recent_documents(&recent),
+                Err(error) => log::warn!("Could not restore Android recent CAD documents: {error}"),
+            }
             if let Some(directory) = recovery_directory.as_deref() {
                 let minutes = solve.autosave_minutes;
                 let interval = if minutes > 0.0 {
