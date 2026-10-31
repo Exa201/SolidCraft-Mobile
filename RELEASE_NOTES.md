@@ -2,6 +2,14 @@
 
 SolidCraft Mobile is an early Android development preview of the shared SolidCraft Rust CAD engine and egui interface. It is intended for hands-on testing and feedback, not as a feature-complete or production-signed CAD release.
 
+## v0.1.0 Android Preview 9
+
+- Published as [GitHub prerelease `v0.1.0-android-preview.9`](https://github.com/Exa201/SolidCraft-Mobile/releases/tag/v0.1.0-android-preview.9) from source commit `395fe89310355b99fb22831fd6627cf3c4259620`; the GitHub release assets were replaced with the exact APKs uploaded by Android workflow [41236181932](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41236181932), which completed successfully.
+- Includes arm64-v8a and x86_64 debug APKs (compile/target SDK 37, minimum Android API 28). The release includes `SHA256SUMS.txt`; ARM64 SHA-256 is `2ac31af9e7bbaf5e90b212fbc8df150f8720edb67af62df66e5d01d3b34054a4`.
+- Includes the Android native event-loop destruction fix and SAF document write-back using process context. The release notes record 43 JVM tests and a successful SAF Activity-destruction emulator instrumentation test for that build.
+- Treat this as a device-testing preview, not a stable or feature-complete release. GLES rendering failures have been observed on x86_64 Android emulators; Xiaomi/ARM64 rendering is not established. See [TEST_REPORT.md](TEST_REPORT.md) for later device observations and exact limitations.
+- APKs are debug-signed. If Android rejects an update because the signing key or package ID differs, uninstall the previous preview before installing this one; uninstalling removes that app's local data.
+
 ## v0.1.0 Android Preview 7
 
 - Published as [GitHub prerelease `v0.1.0-android-preview.7`](https://github.com/Exa201/SolidCraft-Mobile/releases/tag/v0.1.0-android-preview.7) from source commit `ab7c1b03f3d11833e6a11917d785280301bef0d1`.
