@@ -1,5 +1,11 @@
 # SolidCraft Mobile Test Report
 
+## Isolierte Android-16-Instrumentierung (2026-11-01)
+
+- `IncomingCadDocumentInstrumentedTest` lief separat auf dem sauberen API-36-x86_64-AVD `emulator-5558`: 1 Test, 0 Fehler. Der Test deckt `ACTION_VIEW`, privates Staging, asynchrones Öffnen durch Rust und Recent sowie den gemeinsam genutzten `ACTION_SEND`-Handler ab; die reale `onNewIntent`-Zustellung bleibt manuell zu prüfen.
+- `MainActivityLifecycleTest` lief in einem zweiten Gradle-Aufruf auf demselben AVD: 3 Tests, 0 Fehler (Rotation/Systemleisten, FileProvider-Pfade und Save-Back nach Activity-Zerstörung). Die getrennten Läufe umgehen die zuvor beobachtete native Eventloop-Wiederverwendung, bei der Rotation in einer ungefilterten gemeinsamen Suite fehlschlug. Die CI führt dieselben Klassen deshalb in getrennten Emulator-Schritten aus.
+- Die Lifecycle-Logcats enthalten während des Startens und Rotierens Meldungen über 36 bis 217 übersprungene Frames. Das ist ein deutlicher Emulator-Performance-Hinweis; es belegt weder flüssige Bedienung noch die Leistung auf Xiaomi-Hardware. Physische Xiaomi-Installation und Touch-Gesten bleiben unverifiziert (MIUI verweigerte den früheren ADB-Installationsversuch).
+
 ## Android multi-touch input test attempt (2026-11-01)
 
 On the isolated API-36 x86_64 AVD `emulator-5560`, a temporary instrumentation test injected two-pointer `MotionEvent`s with `UiAutomation`. Android reported successful injection and the `MainActivity` window callback observed two-pointer `ACTION_MOVE` events. PixelCopy captured the SolidCraft window before and after, but sampled pixels were unchanged. Temporary diagnostics in the Android Rust raw-input hook and winit event loop did not observe the synthetic stream. This harness therefore reached Java window dispatch without demonstrating delivery into the native input queue; the failed visual assertion is **not** evidence that real device pinch is broken. The temporary test and diagnostics were removed rather than retained as a misleading regression test. Shared Rust navigation tests still pass, while Android-native multi-touch remains unverified and needs a real touchscreen interaction or a test harness that enters GameActivity's native input queue.
