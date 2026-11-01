@@ -815,6 +815,12 @@ pub fn tick(app: &mut SolveApp, ctx: &egui::Context) {
                     crate::documents::adopt(app, made.session);
                     if request.kind == Kind::Open {
                         app.home.add_recent(&request.path);
+                        log::info!("Opened CAD document and updated recents");
+                        if let Some(persist) = app.services.persist_recent_documents.clone()
+                            && let Err(error) = persist(&app.home.recent)
+                        {
+                            app.set_status(format!("Document opened, but recent-file history could not be persisted: {error}"), true);
+                        }
                     }
                 }
                 app.home.open = false;
@@ -849,6 +855,7 @@ pub fn tick(app: &mut SolveApp, ctx: &egui::Context) {
                 app.set_status(e, true);
             }
             Err(e) => {
+                log::warn!("Could not open CAD document: {e}");
                 request.answer(Err(e.clone()));
                 if let Kind::Recover { id, dir } = &request.kind {
                     reoffer(app, id, dir.as_deref());

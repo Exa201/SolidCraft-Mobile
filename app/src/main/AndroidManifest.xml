@@ -17,12 +17,50 @@
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|uiMode"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="unspecified"
             android:windowSoftInputMode="adjustResize">
             <meta-data android:name="android.app.lib_name" android:value="solidcraft_android" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-solidcraft" />
+                <data android:mimeType="model/step" />
+                <data android:mimeType="model/iges" />
+                <data android:mimeType="application/step" />
+                <data android:mimeType="application/iges" />
+                <data android:mimeType="model/vnd.3dm" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="model/gltf+json" />
+                <data android:mimeType="model/gltf-binary" />
+                <data android:mimeType="image/vnd.dxf" />
+                <data android:mimeType="image/svg+xml" />
+                <data android:mimeType="application/json" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/x-solidcraft" />
+                <data android:mimeType="model/step" />
+                <data android:mimeType="model/iges" />
+                <data android:mimeType="application/step" />
+                <data android:mimeType="application/iges" />
+                <data android:mimeType="model/vnd.3dm" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="model/gltf+json" />
+                <data android:mimeType="model/gltf-binary" />
+                <data android:mimeType="image/vnd.dxf" />
+                <data android:mimeType="image/svg+xml" />
+                <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
     </application>

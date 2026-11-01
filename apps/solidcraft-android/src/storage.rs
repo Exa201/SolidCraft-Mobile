@@ -90,6 +90,19 @@ pub(super) fn recent_documents() -> Result<Vec<String>, String> {
     encoded.map_or_else(|| Ok(Vec::new()), |value| serde_json::from_str(&value).map_err(jni_error))
 }
 
+pub(super) fn take_pending_external_document() -> Result<Option<String>, String> {
+    with_jni(|env| {
+        let class = activity_class(env)?;
+        let result = env.call_static_method(class, jni_str!("takePendingExternalDocument"), jni_sig!("()Ljava/lang/String;"), &[])?.l()?;
+        if result.is_null() {
+            return Ok(None);
+        }
+        let value = JString::cast_local(env, result)?;
+        Ok(Some(value.try_to_string(env)?))
+    })
+    .map_err(jni_error)
+}
+
 fn persist_recent_documents(paths: &[String]) -> Result<(), String> {
     let serialized = serde_json::to_string(paths).map_err(jni_error)?;
     let message = with_jni(|env| {

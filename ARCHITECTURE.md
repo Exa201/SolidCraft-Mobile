@@ -8,6 +8,7 @@ SolidCraft Mobile packages the existing SolidCraft Rust CAD engine and egui inte
 Android Activity (Kotlin / GameActivity)
   ├─ Android lifecycle, immersive window, text input
   ├─ Storage Access Framework and ContentResolver
+  ├─ Incoming CAD `ACTION_VIEW` / `ACTION_SEND` URI staging
   ├─ FileProvider and Android app chooser for exported meshes
   └─ JNI callbacks for document picker, write-back and mesh sharing
           ↓ GameActivity native loading / JNI
@@ -29,6 +30,8 @@ Shared wgpu rendering
 Mesh exports stay in the app's private cache until the user selects an Android app. Rust writes STL or 3MF to a unique cache file; Kotlin checks that it is inside the dedicated share folder and returns a read-only `FileProvider` URI through `ACTION_SEND`. The chooser grants read access to the receiving app. Old exports are pruned after seven days. Desktop slicer detection and process launching remain separate and are not available through Android's app chooser.
 
 The engine accepts filesystem paths, so SAF documents are copied into durable app-private storage. Open selections are staged before the Rust file command receives the path. Save selections retain a URI-to-staged-path mapping; Rust saves to the staged file and the Kotlin bridge writes the completed file back through `ContentResolver`. Persistable grants are retained when the provider supports them. No broad storage permission is requested. The staged workspace is not the user-visible source of truth: provider write failures are returned to the save workflow.
+
+Android file-manager `ACTION_VIEW` and app-share `ACTION_SEND` intents are filtered to supported CAD MIME types and file extensions. Kotlin stages the received `content://` document through the same SAF mapping and glTF sidecar path as an in-app Open. Completed staged paths enter a thread-safe queue and are handed to `SolveApp::open_path_async` from the Rust UI loop; `singleTop` delivers later shares to `onNewIntent` without creating another game Activity. The queue is polled at a bounded interval so a share arriving while the CAD view is idle still opens.
 
 Provider write-back uses the process `Application` context, not the current `Activity`, because native save workers can finish after Android destroys or replaces the Activity. `vendor/winit` carries a small Android lifecycle patch: upstream winit ignored `MainEvent::Destroy`, leaving the eframe event loop alive while GameActivity waited for `android_main` to return. The patch exits the loop on destroy so eframe runs its normal save-and-destroy path.
 

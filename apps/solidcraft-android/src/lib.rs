@@ -10,6 +10,7 @@ mod storage;
 
 struct MobileApp {
     solve: SolveApp,
+    last_external_document_poll: std::time::Instant,
 }
 
 impl eframe::App for MobileApp {
@@ -19,6 +20,19 @@ impl eframe::App for MobileApp {
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.solve.logic(ctx);
+        let poll_interval = std::time::Duration::from_millis(200);
+        if self.last_external_document_poll.elapsed() >= poll_interval {
+            self.last_external_document_poll = std::time::Instant::now();
+            match storage::take_pending_external_document() {
+                Ok(Some(path)) => {
+                    log::info!("Opening CAD document shared by Android");
+                    self.solve.open_path_async(&path);
+                }
+                Ok(None) => {}
+                Err(error) => log::warn!("Could not read Android shared document queue: {error}"),
+            }
+        }
+        ctx.request_repaint_after(poll_interval);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -90,7 +104,7 @@ fn android_main(app: AndroidApp) {
                 };
                 solidcraft_ui_egui::recovery_ui::start(&mut solve, directory, interval);
             }
-            Ok(Box::new(MobileApp { solve }))
+            Ok(Box::new(MobileApp { solve, last_external_document_poll: std::time::Instant::now() }))
         }),
     );
     if let Err(error) = result {
