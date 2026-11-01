@@ -13,7 +13,7 @@ On the isolated API-36 x86_64 AVD `emulator-5560`, a temporary instrumentation t
 
 The connected Xiaomi 2211133G reports Android 16 / API 36, but was in Doze and rejected ADB input with `INJECT_EVENTS`; the Android test runner's install attempt was also rejected as `INSTALL_FAILED_USER_RESTRICTED`. No Xiaomi install or gesture result is claimed.
 
-After removing the temporary harness, `cargo test -p solidcraft-ui-egui --profile ci --lib navigation::tests` passed 18/18 tests, including the shared egui two-finger input-to-camera path and three-finger orbit. `:app:testDebugUnitTest -x :app:buildRustAndroid --rerun-tasks --no-daemon` executed 48 Kotlin/JVM tests: 48 passed, 0 failed, 0 skipped.
+After removing the temporary harness, `cargo test -p solidcraft-ui-egui --profile ci --lib navigation::tests` passed 18/18 tests, including the shared egui two-finger input-to-camera path and three-finger orbit. The same command was freshly rerun on 2026-11-01 and again passed 18/18 (1,863 unrelated tests filtered). `:app:testDebugUnitTest -x :app:buildRustAndroid --rerun-tasks --no-daemon` executed 48 Kotlin/JVM tests: 48 passed, 0 failed, 0 skipped.
 
 ## Android 16 SAF open and Save As round-trip (2026-11-01)
 
