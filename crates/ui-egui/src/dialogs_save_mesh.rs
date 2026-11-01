@@ -1,5 +1,5 @@
 //! The Save as mesh dialog (`file.save_mesh`): which bodies, the mesh format, and optionally a
-//! slicer to open the saved file in.
+//! slicer or Android app to open the saved file in.
 //!
 //! Every place that saves a mesh opens this dialog: File › Export STL / Export 3MF, the Mesh tab, and the
 //! Save As Mesh item of the body menus. The slicer list holds the programs the user added (kept
@@ -33,6 +33,7 @@ const MAX_CUSTOM: usize = 24;
 pub struct SaveMesh {
     format: usize,
     send: bool,
+    share_mesh: bool,
     /// The chosen slicer: an installed one's id, or the path of one the user added.
     slicer: String,
     /// The slicer list has not been read for this opening yet.
@@ -91,7 +92,13 @@ pub fn start(app: &SolveApp, id: &str) -> Option<(Kind, Vec<SelInput>)> {
     }
     let p = &app.preferences;
     let format = FORMATS.iter().position(|f| f.1 == p.save_mesh_format).unwrap_or(0);
-    let kind = Kind::SaveMesh(SaveMesh { format, send: p.save_mesh_send, slicer: p.save_mesh_slicer.clone(), stale: true });
+    let kind = Kind::SaveMesh(SaveMesh {
+        format,
+        send: p.save_mesh_send,
+        share_mesh: app.services.share_mesh.is_some() && app.services.share_mesh_dir.is_some() && app.services.pick_program.is_none(),
+        slicer: p.save_mesh_slicer.clone(),
+        stale: true,
+    });
     Some((kind, vec![SelInput::new("Bodies", BODIES, true)]))
 }
 
@@ -168,18 +175,23 @@ pub fn rows(app: &mut SolveApp, ui: &mut egui::Ui, k: &mut SaveMesh) -> bool {
         if !entries.iter().any(|e| e.key == k.slicer) {
             k.slicer = entries.first().map(|e| e.key.clone()).unwrap_or_default();
         }
-        k.send &= !entries.is_empty();
+        k.send &= !entries.is_empty() || k.share_mesh;
     }
     choice_row(ui, "Format", "sm_format", &mut k.format, &FORMATS.map(|f| f.0));
 
     // A browser has no installed programs to send a file to.
-    if app.services.pick_program.is_none() {
+    if app.services.pick_program.is_none() && !k.share_mesh {
         k.send = false;
         return false;
     }
-    form_row(ui, "Send to slicer", |ui| {
+    let send_label = if k.share_mesh { crate::i18n::tr("ui.share_mesh") } else { crate::i18n::tr("ui.send_to_slicer") };
+    form_row(ui, send_label, |ui| {
         crate::ui_kit::checkbox(ui, "", &mut k.send);
     });
+
+    if k.share_mesh {
+        return false;
+    }
 
     form_row(ui, "Slicer", |ui| {
         if let Some(path) = app.slicer_menu.picked.take() {
@@ -299,7 +311,7 @@ pub fn commands(k: &SaveMesh, inputs: &[SelInput]) -> Result<Vec<(String, Value)
         return Err(crate::i18n::tr("ui.save_mesh_pick_bodies").into());
     }
     p["bodies"] = json!(names);
-    if k.send {
+    if k.send && !k.share_mesh {
         if k.slicer.is_empty() {
             return Err(crate::i18n::tr("ui.save_mesh_no_slicer").into());
         }
@@ -318,10 +330,10 @@ pub fn button(k: &SaveMesh) -> &'static str {
     if k.send { "Send" } else { "Save" }
 }
 
-/// Save: ask for a file name and write the file. Send: write it to a temporary file and start the
-/// slicer with it, with no file dialog.
+/// Save asks for a file name. Send writes to a temporary file and opens the host's slicer or app
+/// chooser without a file dialog.
 pub fn run(app: &mut SolveApp, k: &SaveMesh, inputs: &[SelInput]) -> Result<(), String> {
-    let (_, params) = commands(k, inputs)?.into_iter().next().ok_or("nothing to save")?;
+    let (_, mut params) = commands(k, inputs)?.into_iter().next().ok_or("nothing to save")?;
     let (format, ext) = FORMATS.get(k.format).map_or(("stl", "stl"), |f| (f.1, f.2));
     let name = crate::selection::items(inputs, 0).body_names().first().cloned().unwrap_or_else(|| app.session.doc.name.clone());
     let p = &mut app.preferences;
@@ -331,16 +343,34 @@ pub fn run(app: &mut SolveApp, k: &SaveMesh, inputs: &[SelInput]) -> Result<(), 
         p.save_mesh_slicer = k.slicer.clone();
     }
     if k.send {
-        let dir = std::env::temp_dir().join("solidcraft-slicer");
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| crate::i18n::format("ui.save_mesh_temp_failed", &[("folder", &dir.display().to_string()), ("error", &e.to_string())]))?;
         let file: String = name.chars().map(|c| if c.is_alphanumeric() || "-_. ".contains(c) { c } else { '_' }).collect();
-        save(app, params, &dir.join(format!("{file}.{ext}")).to_string_lossy());
+        if k.share_mesh {
+            let share_dir = (app.services.share_mesh_dir.as_ref().ok_or("Android mesh sharing is unavailable")?)()?;
+            let share_dir = std::path::PathBuf::from(share_dir);
+            if !share_dir.is_dir() {
+                std::fs::create_dir_all(&share_dir).map_err(|e| {
+                    crate::i18n::format("ui.save_mesh_temp_failed", &[("folder", &share_dir.display().to_string()), ("error", &e.to_string())])
+                })?;
+            }
+            let serial = SHARE_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = share_dir.join(format!("{file}-{}-{serial}.{ext}", std::process::id()));
+            // Android opens a platform chooser after exporting. The engine's desktop slicer
+            // parameter launches a native process and must not be passed to that host callback.
+            if let Some(object) = params.as_object_mut() {
+                object.remove("slicer");
+            }
+            save(app, params, &path.to_string_lossy(), Some(mesh_mime(format)));
+        } else {
+            let dir = std::env::temp_dir().join("solidcraft-slicer");
+            std::fs::create_dir_all(&dir)
+                .map_err(|e| crate::i18n::format("ui.save_mesh_temp_failed", &[("folder", &dir.display().to_string()), ("error", &e.to_string())]))?;
+            save(app, params, &dir.join(format!("{file}.{ext}")).to_string_lossy(), None);
+        }
     } else {
         // The file dialog answers later; the dialog closes meanwhile, as for every export.
         app.pick_save(&format!("{name}.{ext}"), &[ext], move |app, path| {
             if let Some(path) = path {
-                save(app, params, &path);
+                save(app, params, &path, None);
             }
         });
     }
@@ -348,16 +378,96 @@ pub fn run(app: &mut SolveApp, k: &SaveMesh, inputs: &[SelInput]) -> Result<(), 
 }
 
 /// Run `file.save_mesh` into `path` and report what happened.
-fn save(app: &mut SolveApp, mut params: Value, path: &str) {
-    // Runs from the file picker's answer, outside the frame's language scope.
-    let _language = crate::i18n::scope(&app.preferences.language);
+static SHARE_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn mesh_mime(format: &str) -> &'static str {
+    match format {
+        "3mf" | "3mf-tagged" => "application/vnd.ms-3mfdocument",
+        _ => "model/stl",
+    }
+}
+
+fn save(app: &mut SolveApp, mut params: Value, path: &str, share_mime: Option<&str>) {
     params["path"] = json!(path);
-    let Ok(result) = app.run("file.save_mesh", params) else { return };
-    match result.get("slicer_error").and_then(Value::as_str) {
-        Some(e) => app.set_status(e.to_string(), true),
-        None => match result.get("slicer").and_then(Value::as_str) {
-            Some(s) => app.set_status(crate::i18n::format("ui.sent_to_slicer", &[("slicer", s)]), false),
-            None => app.set_status(crate::i18n::format("ui.saved_to", &[("path", path)]), false),
-        },
+    let path = path.to_owned();
+    let mime = share_mime.map(str::to_owned);
+    let language = app.preferences.language.clone();
+    let after_export = Some(Box::new(move |app: &mut SolveApp, result: &Value| {
+        let _language = crate::i18n::scope(&language);
+        if let Some(mime) = mime {
+            let Some(share) = app.services.share_mesh.as_ref() else {
+                app.set_status("Android mesh sharing is unavailable".to_string(), true);
+                return;
+            };
+            match share(&path, &mime) {
+                Ok(()) => app.set_status(crate::i18n::tr("ui.android_choose_mesh_app").to_string(), false),
+                Err(error) => app.set_status(error, true),
+            }
+            return;
+        }
+        if let Some(error) = result.get("slicer_error").and_then(Value::as_str) {
+            app.set_status(error.to_owned(), true);
+        } else if let Some(slicer) = result.get("slicer").and_then(Value::as_str) {
+            app.set_status(crate::i18n::format("ui.sent_to_slicer", &[("slicer", slicer)]), false);
+        } else {
+            app.set_status(crate::i18n::format("ui.saved_to", &[("path", &path)]), false);
+        }
+    }) as Box<dyn FnOnce(&mut SolveApp, &Value)>);
+    // Mesh tessellation and serialization can be expensive on large designs. Run them on the
+    // shared save worker; Android opens the chooser only after the completed file is written.
+    crate::save_job::start_export(app, "file.save_mesh", params, after_export);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::selection::BODIES;
+    use solidcraft_engine::Sel;
+
+    #[test]
+    fn android_share_mesh_command_exports_selected_bodies_without_a_desktop_slicer() {
+        let mut bodies = SelInput::new("Bodies", BODIES, true);
+        bodies.items.push(Sel::Body { name: "Block".into() });
+        let dialog = SaveMesh { format: 1, send: true, share_mesh: true, slicer: String::new(), stale: false };
+
+        let commands = commands(&dialog, &[bodies]);
+        assert!(commands.is_ok(), "selected body should be exportable: {commands:?}");
+        let commands = commands.unwrap_or_default();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].0, "file.save_mesh");
+        assert_eq!(commands[0].1["format"], "3mf");
+        assert_eq!(commands[0].1["bodies"], json!(["Block"]));
+        assert!(commands[0].1.get("slicer").is_none(), "Android hands the staged file to the system chooser");
+    }
+
+    #[test]
+    fn android_share_uses_mesh_mime_types() {
+        assert_eq!(mesh_mime("stl"), "model/stl");
+        assert_eq!(mesh_mime("3mf"), "application/vnd.ms-3mfdocument");
+        assert_eq!(mesh_mime("3mf-tagged"), "application/vnd.ms-3mfdocument");
+    }
+
+    #[test]
+    fn mesh_share_opens_only_after_the_background_export_is_complete() {
+        let mut h = crate::scenario::Harness::new();
+        h.app.run("solid.box", json!({"length": 10, "width": 10, "height": 10})).unwrap();
+        let path = h.dir.join("shared.stl");
+        let opened = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let opened_from_callback = opened.clone();
+        h.app.services.share_mesh = Some(Box::new(move |shared_path, mime| {
+            let file = std::path::Path::new(shared_path);
+            if !file.is_file() || file.metadata().map_err(|error| error.to_string())?.len() == 0 {
+                return Err("the export is not ready to share".into());
+            }
+            *opened_from_callback.lock().map_err(|error| error.to_string())? = Some((shared_path.to_owned(), mime.to_owned()));
+            Ok(())
+        }));
+
+        save(&mut h.app, json!({"format": "stl"}), &path.to_string_lossy(), Some("model/stl"));
+        assert!(h.app.saving.is_some(), "the export should leave the UI frame while it runs");
+        assert!(opened.lock().unwrap().is_none(), "the chooser must wait until export completion");
+        h.settle();
+
+        assert_eq!(opened.lock().unwrap().as_ref(), Some(&(path.to_string_lossy().into_owned(), "model/stl".to_owned())));
     }
 }

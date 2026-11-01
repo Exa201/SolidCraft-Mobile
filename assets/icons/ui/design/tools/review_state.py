@@ -23,7 +23,9 @@ def master_hash(master, design=None):
     d = D if design is None else design
     h = hashlib.sha256()
     for f in sorted(glob.glob(d + '/svg/*/' + master + '.svg')):
-        h.update(os.path.relpath(f, d).replace(os.sep, '/').encode()); h.update(lf(open(f, 'rb').read()))
+        h.update(os.path.relpath(f, d).replace(os.sep, '/').encode())
+        with open(f, 'rb') as source:
+            h.update(lf(source.read()))
     return h.hexdigest()
 def load():
     try: r = json.load(open(REVIEW, encoding='utf-8'))

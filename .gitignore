@@ -1,4 +1,8 @@
 /target*/
+/build/
+/.gradle/
+/app/build/
+/app/src/main/jniLibs/
 /plan/
 /dist/
 *~

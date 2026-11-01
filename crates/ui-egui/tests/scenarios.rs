@@ -159,7 +159,7 @@ fn home_tab_and_file_recent_open_designs() {
     ]))
     .unwrap();
     h.run(&json!([
-        {"widget":path},
+        {"widget":"recent.solidcraft"},
         {"until":{"file_busy":false}},
         {"expect":{"home":false,"bodies":1,"documents":3}}
     ]))

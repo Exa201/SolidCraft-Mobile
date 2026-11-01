@@ -99,14 +99,24 @@ fn file_grid_cells_use_vertical_layout_even_inside_a_horizontal_parent() {
 fn sample_grid_stretches_each_row_without_clipping_long_descriptions() {
     let ctx = crate::fonts::test_context();
     let mut cards = Vec::new();
-    let output = ctx.run_ui(
+    let output = crate::test_support::frame(
+        &ctx,
         egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(680.0, 600.0))), ..Default::default() },
         |ui| {
             ui.set_width(680.0);
-            cards = FileView::sample_grid(ui, "samples", &[
-                SampleCard { title: "Plate", description: "Short description", icon: "new", thumbnail: None },
-                SampleCard { title: "Enclosure", description: "Long descriptive sample text that wraps across several lines while preserving every word through the final marker.", icon: "new", thumbnail: None },
-            ]);
+            cards = FileView::sample_grid(
+                ui,
+                "samples",
+                &[
+                    SampleCard { title: "Plate", description: "Short description", icon: "new", thumbnail: None },
+                    SampleCard {
+                        title: "Enclosure",
+                        description: "Long descriptive sample text that wraps across several lines while preserving every word through the final marker.",
+                        icon: "new",
+                        thumbnail: None,
+                    },
+                ],
+            );
         },
     );
     assert_eq!(cards.len(), 2);

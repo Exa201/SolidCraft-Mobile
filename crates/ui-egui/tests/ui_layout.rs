@@ -71,7 +71,7 @@ fn other_windows_fit_on_screen() {
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
 
-/// The docked ribbon reserves the same space in both themes and at narrow widths. The
+/// The docked ribbon reserves its responsive height in both themes and at narrow widths. The
 /// existing panel menus and S box remain usable through the new painted hit targets.
 #[test]
 fn docked_ribbon_geometry_and_search() {
@@ -87,7 +87,9 @@ fn docked_ribbon_geometry_and_search() {
             let workspace = rect_of("ribbon:workspace").unwrap();
             let search = rect_of("ribbon:search").unwrap();
             assert_eq!(ribbon.top(), toolbar::APP_BAR_HEIGHT);
-            assert_eq!(ribbon.height(), 117.0);
+            let compact = width < 600.0;
+            let ribbon_height = if compact { toolbar::TAB_ROW_HEIGHT + 62.0 + 1.0 } else { toolbar::RIBBON_HEIGHT };
+            assert_eq!(ribbon.height(), ribbon_height);
             assert_eq!(ribbon.width(), width);
             assert_eq!(workspace.width(), 88.0);
             assert_eq!(workspace.top(), ribbon.top());
@@ -115,7 +117,7 @@ fn docked_ribbon_geometry_and_search() {
             assert_eq!(search.width(), (hint_width + key_width + t.space_16 + t.space_4 * 5.0 + t.space_2).ceil());
             assert!(ribbon.contains_rect(search));
             assert!(search.left() > workspace.right());
-            assert!(h.app.viewport.rect.unwrap().top() >= toolbar::APP_BAR_HEIGHT + toolbar::RIBBON_HEIGHT);
+            assert!(h.app.viewport.rect.unwrap().top() >= toolbar::APP_BAR_HEIGHT + ribbon_height);
             h.step(&json!({"click":{"handle":"ribbon:search"}})).unwrap();
             assert!(h.app.ui.palette_open);
             h.frames(10);

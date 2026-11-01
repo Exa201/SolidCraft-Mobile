@@ -20,6 +20,8 @@ concurrency:
 
 jobs:
   publish:
+    # Android APK previews don't contain a desktop Flatpak and must not trigger Pages deployment.
+    if: ${{ !contains(github.event.release.tag_name || inputs.release_tag, '-android-preview.') }}
     name: Request the combined docs, web, and Flatpak deployment
     runs-on: ubuntu-24.04
     env:

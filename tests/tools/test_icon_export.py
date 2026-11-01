@@ -2,12 +2,13 @@
 import json
 import csv
 import pathlib
+import re
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import unittest
 import urllib.error
 import urllib.request
@@ -77,39 +78,62 @@ class IconExportTest(unittest.TestCase):
             # An accepted icon's note must never be exported, even if it still has text.
             original = {'final': {'box': ''}, 'notes': {'box': 'Keep it', 'joint': 'Round the corners\nUse related icons'}}
             (design / 'review.json').write_text(json.dumps(original), encoding='utf-8')
-            with socket.socket() as port_socket:
-                port_socket.bind(('127.0.0.1', 0))
-                port = port_socket.getsockname()[1]
-            proc = subprocess.Popen([sys.executable, str(tools / 'icon_status.py'), '--serve', str(port)],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            proc = subprocess.Popen([sys.executable, str(tools / 'icon_status.py'), '--serve', '0'],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
-                url = 'http://127.0.0.1:%d' % port
-                # Up to a minute: CI machines can be busy enough that the server starts slowly.
-                deadline = time.monotonic() + 60
-                while time.monotonic() < deadline:
-                    try:
-                        with urllib.request.urlopen(url + '/api/review', timeout=1) as response:
-                            base = json.load(response)
+                startup = []
+                match = None
+                while proc.poll() is None and match is None:
+                    line = proc.stdout.readline().decode(errors='replace').strip()
+                    if not line and proc.poll() is not None:
                         break
-                    except urllib.error.URLError:
-                        if proc.poll() is not None:
-                            self.fail(proc.stderr.read().decode())
-                        time.sleep(0.02)
-                else:
-                    self.fail('review server did not start')
+                    startup.append(line)
+                    match = re.search(r'http://127\.0\.0\.1:(\d+)', line)
+                if not match:
+                    self.fail('\n'.join(startup) + '\n' + proc.stderr.read().decode(errors='replace')
+                              or 'review server did not report its port')
+                url = 'http://127.0.0.1:' + match.group(1)
+
+                def http_request(endpoint, data=None, retry_safe=True):
+                    deadline = time.monotonic() + 15
+                    while True:
+                        try:
+                            with urllib.request.urlopen(url + endpoint if data is None else
+                                                       urllib.request.Request(url + endpoint, data=data), timeout=3) as response:
+                                body = response.read()
+                                return json.loads(body) if endpoint.startswith('/api/') else body.decode()
+                        except urllib.error.HTTPError:
+                            raise
+                        except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
+                            if not retry_safe:
+                                if proc.poll() is None:
+                                    proc.terminate()
+                                    proc.wait(timeout=5)
+                                detail = proc.stderr.read().decode(errors='replace')
+                                raise RuntimeError(f'{endpoint} transport failed: {error}; server diagnostics: {detail}') from error
+                            if proc.poll() is not None:
+                                raise RuntimeError(proc.stderr.read().decode(errors='replace'))
+                            if time.monotonic() >= deadline:
+                                raise
+                            time.sleep(0.05)
+
+                base = http_request('/api/review')
 
                 def post(endpoint, state):
                     data = json.dumps({'base': base, **state}).encode()
-                    with urllib.request.urlopen(urllib.request.Request(url + endpoint, data=data), timeout=2) as response:
-                        return json.load(response)
+                    return http_request(endpoint, data, retry_safe=True)
 
                 state = {'final': base['final'], 'notes': base['notes']}
+                state['request_id'] = uuid.uuid4().hex
                 inbox = root / 'target/codex-icon-review/inbox'
                 post('/api/review', state)
                 self.assertFalse(inbox.exists(), 'autosave must not request redraws')
                 result = post('/api/export', state)
                 self.assertTrue(result['ok'])
                 self.assertEqual(result['sent'], 1)
+                retry = post('/api/export', state)
+                self.assertEqual(retry['request_id'], result['request_id'])
+                self.assertEqual(retry['sent'], 1)
                 requests = list(inbox.glob('*.json'))
                 self.assertEqual(len(requests), 1)
                 request = json.loads(requests[0].read_text(encoding='utf-8'))
@@ -117,16 +141,14 @@ class IconExportTest(unittest.TestCase):
                 self.assertEqual(request['notes'], {'joint': original['notes']['joint']})
                 self.assertFalse(list(inbox.glob('*.tmp')))
                 self.assertFalse((root / 'target/review-requests.log').exists())
-                with urllib.request.urlopen(url, timeout=2) as response:
-                    page = response.read().decode()
+                page = http_request('/')
                 self.assertIn('local review inbox', page)
                 self.assertNotIn('Claude', page)
                 self.assertIn('location.reload()', page)
                 # Existing tabs also reload when the server's page implementation changes.
                 with open(tools / 'icon_status.py', 'a', encoding='utf-8') as f:
                     f.write('\n# page update\n')
-                with urllib.request.urlopen(url + '/api/review', timeout=2) as response:
-                    self.assertNotEqual(json.load(response)['rev'], base['rev'])
+                self.assertNotEqual(http_request('/api/review')['rev'], base['rev'])
                 # A note resolved on disk cannot be resurrected by an unchanged stale page.
                 saved = json.loads((design / 'review.json').read_text(encoding='utf-8'))
                 saved['notes'] = {'box': 'Keep it'}
@@ -137,6 +159,7 @@ class IconExportTest(unittest.TestCase):
             finally:
                 proc.terminate()
                 proc.wait(timeout=5)
+                proc.stdout.close()
                 proc.stderr.close()
 
 

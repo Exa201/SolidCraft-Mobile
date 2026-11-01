@@ -4,10 +4,13 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 use solidcraft_engine::Session;
 use solidcraft_engine::doc::{ModelBody, ModelState};
+
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn corpus() -> Vec<PathBuf> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus");
@@ -18,7 +21,8 @@ fn corpus() -> Vec<PathBuf> {
 }
 
 fn temp(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("solidcraft-model-cache-{}-{name}.solidcraft", std::process::id()))
+    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("solidcraft-model-cache-{}-{sequence}-{name}.solidcraft", std::process::id()))
 }
 
 fn open(path: &Path) -> Session {
@@ -140,7 +144,7 @@ fn imported_assemblies_open_from_their_model_as_evaluated() {
     for c in (hinge.script)()["commands"].as_array().unwrap() {
         source.execute(c["command"].as_str().unwrap(), &c["params"]).unwrap();
     }
-    let step = std::env::temp_dir().join(format!("solidcraft-model-cache-{}-hinge.step", std::process::id()));
+    let step = temp("hinge").with_extension("step");
     source.execute("file.export", &json!({"path": step.to_string_lossy()})).unwrap();
     let mut s = Session::default();
     s.execute("file.insert_step", &json!({"path": step.to_string_lossy()})).unwrap();

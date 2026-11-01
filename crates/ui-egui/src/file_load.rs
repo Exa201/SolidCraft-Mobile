@@ -344,6 +344,8 @@ fn start(app: &mut SolveApp) {
     let (preview_tx, preview_rx) = std::sync::mpsc::channel();
     let (command, params) = request.command();
     let scope = request.scope.clone();
+    let persist_document_save = app.services.persist_document_save.clone();
+    let persist_output_path = (request.kind == Kind::ExportDxf).then(|| request.path.clone());
     let thumbnail = request.kind == Kind::Open;
     // While a design rebuilds, a picture of what is built so far (a large design takes a while).
     let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -407,6 +409,12 @@ fn start(app: &mut SolveApp) {
             compute(scratch, command, &params, scope, thumbnail, &worker_phase, &worker_progress)
         }))
         .unwrap_or_else(|_| Err("the file operation failed; the current design is unchanged".into()));
+        let result = match (result, persist_document_save, persist_output_path) {
+            (Ok(made), Some(persist), Some(path)) => {
+                persist(&path).map(|()| made).map_err(|error| format!("could not save {} to its Android document: {error}", path))
+            }
+            (result, _, _) => result,
+        };
         worker_finished.store(true, Ordering::Relaxed);
         let _ = tx.send(result);
     });
@@ -807,6 +815,12 @@ pub fn tick(app: &mut SolveApp, ctx: &egui::Context) {
                     crate::documents::adopt(app, made.session);
                     if request.kind == Kind::Open {
                         app.home.add_recent(&request.path);
+                        log::info!("Opened CAD document and updated recents");
+                        if let Some(persist) = app.services.persist_recent_documents.clone()
+                            && let Err(error) = persist(&app.home.recent)
+                        {
+                            app.set_status(format!("Document opened, but recent-file history could not be persisted: {error}"), true);
+                        }
                     }
                 }
                 app.home.open = false;
@@ -841,6 +855,7 @@ pub fn tick(app: &mut SolveApp, ctx: &egui::Context) {
                 app.set_status(e, true);
             }
             Err(e) => {
+                log::warn!("Could not open CAD document: {e}");
                 request.answer(Err(e.clone()));
                 if let Kind::Recover { id, dir } = &request.kind {
                     reoffer(app, id, dir.as_deref());

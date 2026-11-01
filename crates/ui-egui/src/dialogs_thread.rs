@@ -386,7 +386,7 @@ mod contribution_tests {
             let mut designation = original.to_string();
             let mut custom = None;
             let doc = Document::default();
-            let _ = ctx.run_ui(Default::default(), |ui| {
+            let _ = crate::test_support::frame(&ctx, Default::default(), |ui| {
                 egui::Grid::new("hole_catalogue").show(ui, |ui| {
                     hole_rows(ui, &doc, &mut designation, &mut custom);
                 });
@@ -423,13 +423,11 @@ mod contribution_tests {
             let mut full = true;
             let mut custom = None;
             let doc = Document::default();
-            let _ = context.run_ui(Default::default(), |ui| {
+            let _ = crate::test_support::frame(&context, Default::default(), |ui| {
                 egui::Grid::new("authored_hole").show(ui, |ui| {
                     hole_rows(ui, &doc, &mut hole, &mut custom);
                 });
-                egui::Grid::new("authored_thread").show(ui, |ui| {
-                    rows(ui, &mut thread, &mut suggested, &mut modeled, &mut full);
-                });
+                rows(ui, &mut thread, &mut suggested, &mut modeled, &mut full);
             });
             assert_eq!(hole, original);
             assert_eq!(thread, original);
