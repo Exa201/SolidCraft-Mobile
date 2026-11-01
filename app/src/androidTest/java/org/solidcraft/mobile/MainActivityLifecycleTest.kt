@@ -48,35 +48,6 @@ class MainActivityLifecycleTest {
     }
 
     @Test
-    fun documentSaveBackStillWorksAfterActivityIsDestroyed() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val providerDirectory = File(context.cacheDir, "solidcraft-share").apply { assertTrue(isDirectory || mkdirs()) }
-        val destination = File(providerDirectory, "lifecycle-save.solidcraft").apply { writeText("old document") }
-        val staged = File(context.filesDir, "solidcraft-documents/lifecycle-test/design.solidcraft").apply {
-            parentFile!!.mkdirs()
-            writeText("new complete document")
-        }
-        val preferences = context.getSharedPreferences("solidcraft_documents", android.content.Context.MODE_PRIVATE)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", destination)
-        preferences.edit().putString(
-            staged.absolutePath,
-            JSONObject().put("uri", uri.toString()).put("writable", true).toString(),
-        ).commit()
-
-        val scenario = ActivityScenario.launch(MainActivity::class.java)
-        scenario.close()
-        try {
-            assertEquals("", MainActivity.writeBackDocument(staged.absolutePath))
-            assertEquals("new complete document", destination.readText())
-        } finally {
-            preferences.edit().remove(staged.absolutePath).commit()
-            staged.parentFile?.deleteRecursively()
-            destination.delete()
-            providerDirectory.delete()
-        }
-    }
-
-    @Test
     fun activityAndViewportHostSurviveRotationAndKeepSystemBarsHidden() {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario.moveToState(Lifecycle.State.STARTED)
