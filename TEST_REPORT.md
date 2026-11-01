@@ -8,6 +8,16 @@ The connected Xiaomi 2211133G reports Android 16 / API 36, but was in Doze and r
 
 After removing the temporary harness, `cargo test -p solidcraft-ui-egui --profile ci --lib navigation::tests` passed 18/18 tests, including the shared egui two-finger input-to-camera path and three-finger orbit. `:app:testDebugUnitTest -x :app:buildRustAndroid --rerun-tasks --no-daemon` executed 48 Kotlin/JVM tests: 48 passed, 0 failed, 0 skipped.
 
+## Android 16 SAF open and Save As round-trip (2026-11-01)
+
+GitHub Android workflow [41265807212](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41265807212) passed for commit `46015905590f2881ac8721131f0d7abc90c188cd` and uploaded artifact `13067557272`. I downloaded and independently checked `app-x86_64-debug.apk`: package `org.solidcraft.mobile.debug`, x86_64 ABI, compile/target SDK 37, v2 signature valid, 109,878,836 bytes, SHA-256 `D2D554719159210B8B76CAACB945A15EC6D166F67208FD7381E321FF7F905DCC`.
+
+Installed that exact CI APK on the isolated API-36 x86_64 AVD `solidcraft_touch_isolated_api36` (`emulator-5556`). The app launched to the CAD viewport and rendered the 500-byte `box_no_cache.solidcraft` fixture after File → Open and Android DocumentsUI selection from Downloads; the browser reported one body and the shaded cube remained visible. File → Save As wrote `Android open regression box.solidcraft` to Downloads. Pulling that provider file back produced a valid 8,352-byte ZIP with `document.json`, `container.json`, body cache, and thumbnail entries. No matching app fatal exception, Rust panic, or GLES framebuffer error appeared in the sampled logcat after launch/open/save.
+
+This verifies one exact-artifact API-36 x86_64 launch/Open/Save As flow. It does not establish provider overwrite after editing, Android 16 Xiaomi/ARM64 behavior, or multi-touch CAD delivery. The generated Downloads test files were removed after verification.
+
+After force-stop and relaunch of that exact artifact, the CAD workspace returned successfully, but File → Open Recent had no entries and DocumentsUI showed an empty Downloads folder. The test files had been removed during cleanup, and this test started with a fresh app install, so this is consistent with a fresh-install state rather than a failed persistence test. Durable Recent across a populated app session remains unverified for this exact CI APK.
+
 ## Preview 8 CI and emulator verification (2026-10-31)
 
 GitHub Android workflow [41231382917](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41231382917) completed successfully for commit `8e4bb5811c30b0d9ba071c044bdc8e17bae09d27`. It ran `:app:testDebugUnitTest`, built the `arm64-v8a` and `x86_64` split APKs, verified their package IDs, ABIs, and v2 signatures, and uploaded the CI artifacts. The local Gradle test task also completed successfully (43 JVM tests, 0 failures/errors; task results were up to date from the preceding CI-equivalent build).
