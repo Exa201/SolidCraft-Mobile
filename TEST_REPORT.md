@@ -1,5 +1,13 @@
 # SolidCraft Mobile Test Report
 
+## Android multi-touch input test attempt (2026-11-01)
+
+On the isolated API-36 x86_64 AVD `emulator-5560`, a temporary instrumentation test injected two-pointer `MotionEvent`s with `UiAutomation`. Android reported successful injection and the `MainActivity` window callback observed two-pointer `ACTION_MOVE` events. PixelCopy captured the SolidCraft window before and after, but sampled pixels were unchanged. Temporary diagnostics in the Android Rust raw-input hook and winit event loop did not observe the synthetic stream. This harness therefore reached Java window dispatch without demonstrating delivery into the native input queue; the failed visual assertion is **not** evidence that real device pinch is broken. The temporary test and diagnostics were removed rather than retained as a misleading regression test. Shared Rust navigation tests still pass, while Android-native multi-touch remains unverified and needs a real touchscreen interaction or a test harness that enters GameActivity's native input queue.
+
+The connected Xiaomi 2211133G reports Android 16 / API 36, but was in Doze and rejected ADB input with `INJECT_EVENTS`; the Android test runner's install attempt was also rejected as `INSTALL_FAILED_USER_RESTRICTED`. No Xiaomi install or gesture result is claimed.
+
+After removing the temporary harness, `cargo test -p solidcraft-ui-egui --profile ci --lib navigation::tests` passed 18/18 tests, including the shared egui two-finger input-to-camera path and three-finger orbit. `:app:testDebugUnitTest -x :app:buildRustAndroid --rerun-tasks --no-daemon` executed 48 Kotlin/JVM tests: 48 passed, 0 failed, 0 skipped.
+
 ## Preview 8 CI and emulator verification (2026-10-31)
 
 GitHub Android workflow [41231382917](https://github.com/Exa201/SolidCraft-Mobile/actions/runs/41231382917) completed successfully for commit `8e4bb5811c30b0d9ba071c044bdc8e17bae09d27`. It ran `:app:testDebugUnitTest`, built the `arm64-v8a` and `x86_64` split APKs, verified their package IDs, ABIs, and v2 signatures, and uploaded the CI artifacts. The local Gradle test task also completed successfully (43 JVM tests, 0 failures/errors; task results were up to date from the preceding CI-equivalent build).

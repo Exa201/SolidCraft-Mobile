@@ -14,6 +14,14 @@ Editable drawing code, native projects and shipped exports are collected under `
 
 | File | Author | Source | Licence |
 |---|---|---|---|
+| vendor/winit/docs/res/keyboard_left_shift_key.svg | winit contributors | vendored winit 0.30.13 documentation asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/docs/res/keyboard_numpad_1_key.svg | winit contributors | vendored winit 0.30.13 documentation asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/docs/res/keyboard_right_shift_key.svg | winit contributors | vendored winit 0.30.13 documentation asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/docs/res/keyboard_standard_1_key.svg | winit contributors | vendored winit 0.30.13 documentation asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/examples/data/cross.png | winit contributors | vendored winit 0.30.13 example asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/examples/data/cross2.png | winit contributors | vendored winit 0.30.13 example asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/examples/data/gradient.png | winit contributors | vendored winit 0.30.13 example asset from https://github.com/rust-windowing/winit | Apache-2.0 |
+| vendor/winit/examples/data/icon.png | winit contributors | vendored winit 0.30.13 example asset from https://github.com/rust-windowing/winit | Apache-2.0 |
 | examples/render-studio.json | SolidCraft contributors | original procedural box/cylinder enclosure script for the integrated Render workspace | MIT OR Apache-2.0 |
 | examples/render-opaque-studio.json | SolidCraft contributors | original procedural sphere study varying opaque metal fraction and roughness independently; no external assets or engineering data | MIT OR Apache-2.0 |
 | crates/gpu/src/pbr.rs | SolidCraft contributors | original WGSL translation of SolidCraft's opaque surface and fixed studio reference, embedded as Rust source; no external shader code | MIT OR Apache-2.0 |

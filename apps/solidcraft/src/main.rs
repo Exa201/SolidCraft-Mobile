@@ -258,6 +258,7 @@ fn services(cc: &eframe::CreationContext<'_>) -> Services {
             Box::pin(async move { future.await.map(|p| p.path().to_string_lossy().into_owned()) })
         })),
         persist_document_save: None,
+        persist_recent_documents: None,
         share_mesh: None,
         share_mesh_dir: None,
         graphics_path: graphics_path().map(|p| p.to_string_lossy().to_string()),
