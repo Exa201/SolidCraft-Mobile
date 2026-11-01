@@ -63,7 +63,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: bash gradlew --no-daemon -Pandroid.testInstrumentationRunnerArguments.class=org.solidcraft.mobile.IncomingCadDocumentInstrumentedTest :app:connectedDebugAndroidTest
+          script: bash gradlew --no-daemon -Pandroid.injected.device.serial=emulator-5554 -Pandroid.testInstrumentationRunnerArguments.class=org.solidcraft.mobile.IncomingCadDocumentInstrumentedTest :app:connectedDebugAndroidTest
       - name: Run activity lifecycle instrumentation tests on Android 16
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -71,7 +71,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: bash gradlew --no-daemon -Pandroid.testInstrumentationRunnerArguments.class=org.solidcraft.mobile.MainActivityLifecycleTest :app:connectedDebugAndroidTest
+          script: bash gradlew --no-daemon -Pandroid.injected.device.serial=emulator-5554 -Pandroid.testInstrumentationRunnerArguments.class=org.solidcraft.mobile.MainActivityLifecycleTest :app:connectedDebugAndroidTest
       - name: Verify split APKs and signatures
         shell: bash
         run: |
